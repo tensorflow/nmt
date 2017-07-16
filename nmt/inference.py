@@ -108,7 +108,7 @@ def _decode_inference_indices(model, sess, output_infer,
                   (output_infer, len(inference_indices)))
   start_time = time.time()
   with codecs.getwriter("utf-8")(
-      tf.gfile.GFile(output_infer, mode="w")) as trans_f:
+      tf.gfile.GFile(output_infer, mode="wb")) as trans_f:
     trans_f.write("")  # Write empty string to ensure file is created.
     for decode_id in inference_indices:
       nmt_outputs, infer_summary = model.decode(sess)
@@ -292,7 +292,7 @@ def _multi_worker_inference(model_creator,
 
     # Now write all translations
     with codecs.getwriter("utf-8")(
-        tf.gfile.GFile(final_output_infer, mode="w")) as final_f:
+        tf.gfile.GFile(final_output_infer, mode="wb")) as final_f:
       for worker_id in range(num_workers):
         worker_infer_done = "%s_done_%d" % (inference_output_file, worker_id)
         while not tf.gfile.Exists(worker_infer_done):

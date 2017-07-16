@@ -80,7 +80,7 @@ def load_hparams(model_dir):
   hparams_file = os.path.join(model_dir, "hparams")
   if tf.gfile.Exists(hparams_file):
     print_out("# Loading hparams from %s" % hparams_file)
-    with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_file, "r")) as f:
+    with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_file, "rb")) as f:
       try:
         hparams_values = json.load(f)
         hparams = tf.contrib.training.HParams(**hparams_values)
@@ -109,7 +109,7 @@ def save_hparams(out_dir, hparams):
   """Save hparams."""
   hparams_file = os.path.join(out_dir, "hparams")
   print_out("  saving hparams to %s" % hparams_file)
-  with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "w")) as f:
+  with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "wb")) as f:
     f.write(hparams.to_json())
 
 
