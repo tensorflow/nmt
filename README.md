@@ -191,7 +191,7 @@ usually learned during training.
 
 
 <p align="center">
-<img width="48%" src="nmt/g3doc/img/source_embedding.png" />
+<img src="nmt/g3doc/img/source_embedding.png" />
 <br>
 Figure 3. <b>Source language embedding</b> – example of a source-language vocabulary and embedding. In practice, the vocabulary would include thousands or even millions of words. The target language would similarly have its own embedding table.
 </p>
@@ -209,7 +209,7 @@ encoder_emb_inp = embedding_ops.embedding_lookup(
 
 
 <p align="center">
-<img width="48%" src="nmt/g3doc/img/encoder_emb_inp.png" />
+<img src="nmt/g3doc/img/encoder_emb_inp.png" />
 <br>
 Figure 4. <b>Embedded encoder input</b> – example of how the phrase 'I am a student' is prepared to be fed into the encoder. The variable `encoder_emb_inp` now holds the embedded representation of the phrase.
 </p>
