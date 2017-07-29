@@ -152,7 +152,7 @@ def get_iterator(src_dataset,
   # the target_input <eos> tag (resp. target_output <sos> tag).
   src_tgt_dataset = src_tgt_dataset.map(
       lambda src, tgt_in, tgt_out: (
-          src, tgt_in, tgt_out, tf.size(src), tf.size(tgt_in)),
+          src, tgt_in, tgt_out, tf.size(src), tf.size(tgt_in) - 1),
       num_threads=num_threads,
       output_buffer_size=output_buffer_size)
   # Bucket by source sequence length (buckets for lengths 0-9, 10-19, ...)
