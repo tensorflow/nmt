@@ -61,7 +61,7 @@ def decode_and_evaluate(name,
                 sent_id,
                 tgt_eos=tgt_eos,
                 bpe_delimiter=bpe_delimiter)
-            trans_f.write("%s\n" % translation)
+            utils.print_out(translation, f=trans_f)
         except tf.errors.OutOfRangeError:
           utils.print_time("  done, num sentences %d" % num_sentences,
                            start_time)
@@ -84,6 +84,8 @@ def decode_and_evaluate(name,
 
 def get_translation(nmt_outputs, sent_id, tgt_eos, bpe_delimiter):
   """Given batch decoding outputs, select a sentence and turn to text."""
+  if tgt_eos: tgt_eos = tgt_eos.encode("utf-8")
+  if bpe_delimiter: bpe_delimiter = bpe_delimiter.encode("utf-8")
   # Select a sentence
   output = nmt_outputs[sent_id, :].tolist()
 
