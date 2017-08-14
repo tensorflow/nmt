@@ -23,6 +23,8 @@ import math
 import os
 import sys
 import time
+import locale
+sys.stdout = codecs.getwriter(locale.getpreferredencoding())(sys.stdout)
 
 import numpy as np
 import tensorflow as tf
