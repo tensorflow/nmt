@@ -12,14 +12,14 @@
       - [Encoder](#encoder)
       - [Decoder](#decoder)
       - [Loss](#loss)
-      - [Gradient computation & optimization](#gradient-computation-optimization)
-   - [Hands-on – *Let's train an NMT model*](#hands-on-–-lets-train-an-nmt-model)
-   - [Inference – *How to generate translations*](#inference-–-how-to-generate-translations)
+      - [Gradient computation & optimization](#gradient-computation--optimization)
+   - [Hands-on – *Let's train an NMT model*](#hands-on--lets-train-an-nmt-model)
+   - [Inference – *How to generate translations*](#inference--how-to-generate-translations)
 - [Intermediate](#intermediate)
    - [Background on the Attention Mechanism](#background-on-the-attention-mechanism)
    - [Attention Wrapper API](#attention-wrapper-api)
-   - [Hands-on – *Building an attention-based NMT model*](#hands-on-–-building-an-attention-based-nmt-model)
-- [Tips & Tricks](#tips-tricks)
+   - [Hands-on – *Building an attention-based NMT model*](#hands-on--building-an-attention-based-nmt-model)
+- [Tips & Tricks](#tips--tricks)
    - [Building Training, Eval, and Inference Graphs](#building-training-eval-and-inference-graphs)
    - [Data Input Pipeline](#data-input-pipeline)
    - [Other details for better NMT models](#other-details-for-better-nmt-models)
@@ -31,6 +31,7 @@
    - [IWSLT English-Vietnamese](#iwslt-english-vietnamese)
    - [WMT German-English](#wmt-german-english)
    - [WMT English-German &mdash; *Full Comparison*](#wmt-english-german--full-comparison)
+   - [Standard HParams](#standard-hparams)
 - [Other resources](#other-resources)
 - [Acknowledgment](#acknowledgment)
 - [References](#references)
@@ -75,7 +76,7 @@ how to build and train a vanilla NMT model. The second part will go into details
 of building a competitive NMT model with attention mechanism. We then discuss
 tips and tricks to build the best possible NMT models (both in speed and
 translation quality) such as TensorFlow best practices (batching, bucketing),
-bidirectional RNNs, and beam search.
+bidirectional RNNs, beam search, as well as scaling up to multiple GPUs using GNMT attention.
 
 # Basic
 
@@ -194,7 +195,7 @@ embedding_encoder = variable_scope.get_variable(
     "embedding_encoder", [src_vocab_size, embedding_size], ...)
 # Look up embedding:
 #   encoder_inputs: [max_time, batch_size]
-#   encoder_emp_inp: [max_time, batch_size, embedding_size]
+#   encoder_emb_inp: [max_time, batch_size, embedding_size]
 encoder_emb_inp = embedding_ops.embedding_lookup(
     embedding_encoder, encoder_inputs)
 ```
@@ -222,12 +223,12 @@ encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units)
 #   encoder_state: [batch_size, num_units]
 encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
     encoder_cell, encoder_emb_inp,
-    sequence_length=source_seqence_length, time_major=True)
+    sequence_length=source_sequence_length, time_major=True)
 ```
 
 Note that sentences have different lengths to avoid wasting computation, we tell
 *dynamic_rnn* the exact source sentence lengths through
-*source_seqence_length*. Since our input is time major, we set
+*source_sequence_length*. Since our input is time major, we set
 *time_major=True*. Here, we build only a single layer LSTM, *encoder_cell*. We
 will describe how to build multi-layer LSTMs, add dropout, and use attention in
 a later section.
@@ -465,7 +466,7 @@ cat > /tmp/my_infer_file.vi
 # (copy and paste some sentences from /tmp/nmt_data/tst2013.vi)
 
 python -m nmt.nmt \
-    --model_dir=/tmp/nmt_model \
+    --out_dir=/tmp/nmt_model \
     --inference_input_file=/tmp/my_infer_file.vi \
     --inference_output_file=/tmp/nmt_model/output_infer
 
@@ -660,12 +661,12 @@ python -m nmt.nmt \
     --metrics=bleu
 ```
 
-After training, we can use the same inference command with the new model_dir for
+After training, we can use the same inference command with the new out_dir for
 inference:
 
 ``` shell
 python -m nmt.nmt \
-    --model_dir=/tmp/nmt_attention_model \
+    --out_dir=/tmp/nmt_attention_model \
     --inference_input_file=/tmp/my_infer_file.vi \
     --inference_output_file=/tmp/nmt_attention_model/output_infer
 ```
@@ -1006,7 +1007,7 @@ There are several hyperparameters that can lead to additional
 performances. Here, we list some based on our own experience [ Disclaimers:
 others might not agree on things we wrote! ].
 
-***Optimizer***: while Adam can lead to reasonable for "unfamiliar"
+***Optimizer***: while Adam can lead to reasonable results for "unfamiliar"
 architectures, SGD with scheduling will generally lead to better performance if
 you can train with SGD.
 
@@ -1069,8 +1070,9 @@ cell = GNMTAttentionMultiCell(attention_cell, cells)
 
 ## IWSLT English-Vietnamese
 
-Train: 133K examples, dev=tst2012, test=tst2013,
-[download script](nmt/scripts/download_iwslt15.sh).
+Train: 133K examples, vocab=vocab.(vi|en), train=train.(vi|en)
+dev=tst2012.(vi|en),
+test=tst2013.(vi|en), [download script](nmt/scripts/download_iwslt15.sh).
 
 ***Training details***. We train 2-layer LSTMs of 512 units with bidirectional
 encoder (i.e., 1 bidirectional layers for the encoder), embedding dim
@@ -1083,22 +1085,24 @@ rate every 1K step.
 TODO(rzhao): add URL for English-Vietnamese trained model.
 
 Below are the averaged results of 2 models
-([model 1](LINK),
-[model 2](LINK)).\
+([model 1](http://download.tensorflow.org/models/nmt/envi_model_1.zip),
+[model 2](http://download.tensorflow.org/models/nmt/envi_model_2.zip)).\
 We measure the translation quality in terms of BLEU scores [(Papineni et al., 2002)](http://www.aclweb.org/anthology/P02-1040.pdf).
 
 Systems | tst2012 (dev) | test2013 (test)
 --- | :---: | :---:
 NMT (greedy) | 23.2 | 25.5
 NMT (beam=10) | 23.8 | **26.1**
-[(Luong & Manning, 2015)](http://stanford.edu/~lmthang/data/papers/iwslt15.pdf) | - | 23.3
+[(Luong & Manning, 2015)](https://nlp.stanford.edu/pubs/luong-manning-iwslt15.pdf) | - | 23.3
 
 **Training Speed**: (0.37s step-time, 15.3K wps) on *K40m* & (0.17s step-time, 32.2K wps) on *TitanX*.\
 Here, step-time means the time taken to run one mini-batch (of size 128). For wps, we count words on both the source and target.
 
 ## WMT German-English
 
-Train: 4.5M examples, dev=newstest2013, test=newstest2015\
+Train: 4.5M examples, vocab=vocab.bpe.32000.(de|en),
+train=train.tok.clean.bpe.32000.(de|en), dev=newstest2013.tok.bpe.32000.(de|en),
+test=newstest2015.tok.bpe.32000.(de|en),
 [download script](nmt/scripts/wmt16_en_de.sh)
 
 ***Training details***. Our training hyperparameters are similar to the
@@ -1113,9 +1117,11 @@ halving learning rate every 17K step.
 TODO(rzhao): add URL for German-English trained model.
 
 The first 2 rows are the averaged results of 2 models
-([model 1](LINK),
-[model 2](LINK)).
-Results in the third row is with GNMT attention ([model] (LINK)) ran on 4 GPUs.
+([model 1](http://download.tensorflow.org/models/nmt/deen_model_1.zip),
+[model 2](http://download.tensorflow.org/models/nmt/deen_model_2.zip)).
+Results in the third row is with GNMT attention
+([model](http://download.tensorflow.org/models/nmt/deen_gnmt_model_4_layer.zip))
+; trained with 4 GPUs.
 
 Systems | newstest2013 (dev) | newstest2015
 --- | :---: | :---:
@@ -1141,8 +1147,10 @@ These results show that without GNMT attention, the gains from using multiple gp
 With GNMT attention, we obtain from 50%-100% speed-ups with multiple gpus.
 
 ## WMT English-German &mdash; Full Comparison
-The first 2 rows are our models with GNMT attention: [model 1 (4 layers)](LINK),
-[model 2 (8 layers)](LINK).
+The first 2 rows are our models with GNMT
+attention:
+[model 1 (4 layers)](http://download.tensorflow.org/models/nmt/ende_gnmt_model_4_layer.zip),
+[model 2 (8 layers)](http://download.tensorflow.org/models/nmt/ende_gnmt_model_8_layer.zip).
 
 Systems | newstest2014 | newstest2015
 --- | :---: | :---:
@@ -1155,6 +1163,50 @@ GNMT [(Wu et al., 2016)](https://research.google.com/pubs/pub45610.html) | **24.
 
 The above results show our models are very competitive among models of similar architectures.\
 [Note that OpenNMT uses smaller models and the current best result (as of this writing) is 28.4 obtained by the Transformer network [(Vaswani et al., 2017)](https://arxiv.org/abs/1706.03762) which has a significantly different architecture.]
+
+
+## Standard HParams
+
+We have provided
+[a set of standard hparams](nmt/standard_hparams/)
+for using pre-trained checkpoint for inference or training NMT architectures
+used in the Benchmark.
+
+We will use the WMT16 German-English data, you can download the data by the
+following command.
+
+```
+nmt/scripts/wmt16_en_de.sh /tmp/wmt16
+```
+
+Here is an example command for loading the pre-trained GNMT WMT German-English
+checkpoint for inference.
+
+```
+python -m nmt.nmt \
+    --src=de --tgt=en \
+    --ckpt=/path/to/checkpoint/translate.ckpt \
+    --hparams_path=nmt/standard_hparams/wmt16_gnmt_4_layer.json \
+    --out_dir=/tmp/deen_gnmt \
+    --vocab_prefix=/tmp/wmt16/vocab.bpe.32000 \
+    --inference_input_file=/tmp/wmt16/newstest2014.tok.bpe.32000.de \
+    --inference_output_file=/tmp/deen_gnmt/output_infer \
+    --inference_ref_file=/tmp/wmt16/newstest2014.tok.bpe.32000.en
+```
+
+Here is an example command for training the GNMT WMT German-English model.
+
+```
+python -m nmt.nmt \
+    --src=de --tgt=en \
+    --hparams_path=nmt/standard_hparams/wmt16_gnmt_4_layer.json \
+    --out_dir=/tmp/deen_gnmt \
+    --vocab_prefix=/tmp/wmt16/vocab.bpe.32000 \
+    --train_prefix=/tmp/wmt16/train.tok.clean.bpe.32000 \
+    --dev_prefix=/tmp/wmt16/newstest2013.tok.bpe.32000 \
+    --test_prefix=/tmp/wmt16/newstest2015.tok.bpe.32000
+```
+
 
 # Other resources
 
@@ -1176,7 +1228,10 @@ tf-seq2seq
 Nemantus
 [https://github.com/rsennrich/nematus](https://github.com/rsennrich/nematus)
 *[Theano]* \
-OpenNMT [http://opennmt.net/](http://opennmt.net/) *[Torch]*
+OpenNMT [http://opennmt.net/](http://opennmt.net/) *[Torch]*\
+OpenNMT-py [https://github.com/OpenNMT/OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py) *[PyTorch]*
+
+
 
 # Acknowledgment
 We would like to thank Denny Britz, Anna Goldie, Derek Murray, and Cinjon Resnick for their work bringing new features to TensorFlow and the seq2seq library. Additional thanks go to Lukasz Kaiser for the initial help on the seq2seq codebase; Quoc Le for the suggestion to replicate GNMT; Yonghui Wu and Zhifeng Chen for details on the GNMT systems; as well as the Google Brain team for their support and feedback!

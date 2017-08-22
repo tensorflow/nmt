@@ -17,6 +17,7 @@
 from __future__ import print_function
 
 import codecs
+import collections
 import time
 
 import tensorflow as tf
@@ -32,70 +33,56 @@ from .utils import misc_utils as utils
 from .utils import nmt_utils
 from .utils import vocab_utils
 
-__all__ = ["create_infer_model", "load_inference_hparams", "inference"]
+__all__ = ["create_infer_model", "load_data", "inference",
+           "single_worker_inference", "multi_worker_inference"]
 
 
-def create_infer_model(
-    model_creator,
-    hparams,
-    scope=None):
+class InferModel(
+    collections.namedtuple("InferModel",
+                           ("graph", "model", "src_placeholder",
+                            "batch_size_placeholder", "iterator"))):
+  pass
+
+
+def create_infer_model(model_creator, hparams, scope=None, single_cell_fn=None):
   """Create inference model."""
-  infer_graph = tf.Graph()
+  graph = tf.Graph()
   src_vocab_file = hparams.src_vocab_file
   tgt_vocab_file = hparams.tgt_vocab_file
 
-  with infer_graph.as_default():
-    src_vocab_table = lookup_ops.index_table_from_file(
-        src_vocab_file, default_value=vocab_utils.UNK_ID)
-    tgt_vocab_table = lookup_ops.index_table_from_file(
-        tgt_vocab_file, default_value=vocab_utils.UNK_ID)
+  with graph.as_default():
+    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
     reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
         tgt_vocab_file, default_value=vocab_utils.UNK)
 
-    infer_src_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
-    infer_batch_size_placeholder = tf.placeholder(shape=[], dtype=tf.int64)
+    src_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
+    batch_size_placeholder = tf.placeholder(shape=[], dtype=tf.int64)
 
-    infer_src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
-        infer_src_placeholder)
-    infer_iterator = iterator_utils.get_infer_iterator(
-        infer_src_dataset,
+    src_dataset = tf.contrib.data.Dataset.from_tensor_slices(
+        src_placeholder)
+    iterator = iterator_utils.get_infer_iterator(
+        src_dataset,
         src_vocab_table,
-        batch_size=infer_batch_size_placeholder,
+        batch_size=batch_size_placeholder,
         eos=hparams.eos,
         source_reverse=hparams.source_reverse,
         src_max_len=hparams.src_max_len_infer)
-    infer_model = model_creator(
+    model = model_creator(
         hparams,
-        iterator=infer_iterator,
+        iterator=iterator,
         mode=tf.contrib.learn.ModeKeys.INFER,
         source_vocab_table=src_vocab_table,
         target_vocab_table=tgt_vocab_table,
         reverse_target_vocab_table=reverse_tgt_vocab_table,
-        scope=scope)
-  return (infer_graph, infer_model, infer_src_placeholder,
-          infer_batch_size_placeholder, infer_iterator)
-
-
-def load_inference_hparams(model_dir, inference_list=None):
-  """Load hparams for inference.
-
-  Args:
-    model_dir: directory of trained model.
-    inference_list: optional, comma-separated list of sentence ids.
-
-  Returns:
-    hparams: A tf.HParams() used for inference.
-  """
-  hparams = utils.load_hparams(model_dir)
-  assert hparams
-
-  # Inference indices
-  hparams.inference_indices = None
-  if inference_list:
-    (hparams.inference_indices) = (
-        [int(token)  for token in inference_list.split(",")])
-
-  return hparams
+        scope=scope,
+        single_cell_fn=single_cell_fn)
+  return InferModel(
+      graph=graph,
+      model=model,
+      src_placeholder=src_placeholder,
+      batch_size_placeholder=batch_size_placeholder,
+      iterator=iterator)
 
 
 def _decode_inference_indices(model, sess, output_infer,
@@ -146,13 +133,14 @@ def load_data(inference_input_file, hparams=None):
   return inference_data
 
 
-def inference(model_dir,
+def inference(ckpt,
               inference_input_file,
               inference_output_file,
               hparams,
               num_workers=1,
               jobid=0,
-              scope=None):
+              scope=None,
+              single_cell_fn=None):
   """Perform translation."""
   if hparams.inference_indices:
     assert num_workers == 1
@@ -165,56 +153,53 @@ def inference(model_dir,
     model_creator = gnmt_model.GNMTModel
   else:
     raise ValueError("Unknown model architecture")
+  infer_model = create_infer_model(model_creator, hparams, scope,
+                                   single_cell_fn)
 
   if num_workers == 1:
-    _single_worker_inference(
-        model_creator,
-        model_dir,
+    single_worker_inference(
+        infer_model,
+        ckpt,
         inference_input_file,
         inference_output_file,
-        hparams,
-        scope=scope)
+        hparams)
   else:
-    _multi_worker_inference(
-        model_creator,
-        model_dir,
+    multi_worker_inference(
+        infer_model,
+        ckpt,
         inference_input_file,
         inference_output_file,
         hparams,
         num_workers=num_workers,
-        jobid=jobid,
-        scope=scope)
+        jobid=jobid)
 
 
-def _single_worker_inference(model_creator,
-                             model_dir,
-                             inference_input_file,
-                             inference_output_file,
-                             hparams,
-                             scope=None):
+def single_worker_inference(infer_model,
+                            ckpt,
+                            inference_input_file,
+                            inference_output_file,
+                            hparams):
   """Inference with a single worker."""
   output_infer = inference_output_file
 
   # Read data
   infer_data = load_data(inference_input_file, hparams)
 
-  (infer_graph, infer_model, infer_src_placeholder,
-   infer_batch_size_placeholder, infer_iterator) = (create_infer_model(
-       model_creator, hparams, scope))
-  with tf.Session(graph=infer_graph, config=utils.get_config_proto()) as sess:
-    model_helper.create_or_load_model(
-        infer_model, model_dir, sess, hparams.out_dir, "infer")
+  with tf.Session(
+      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+    loaded_infer_model = model_helper.load_model(
+        infer_model.model, ckpt, sess, "infer")
     sess.run(
-        infer_iterator.initializer,
+        infer_model.iterator.initializer,
         feed_dict={
-            infer_src_placeholder: infer_data,
-            infer_batch_size_placeholder: hparams.infer_batch_size
+            infer_model.src_placeholder: infer_data,
+            infer_model.batch_size_placeholder: hparams.infer_batch_size
         })
     # Decode
     utils.print_out("# Start decoding")
     if hparams.inference_indices:
       _decode_inference_indices(
-          infer_model,
+          loaded_infer_model,
           sess,
           output_infer=output_infer,
           output_infer_summary_prefix=output_infer,
@@ -224,7 +209,7 @@ def _single_worker_inference(model_creator,
     else:
       nmt_utils.decode_and_evaluate(
           "infer",
-          infer_model,
+          loaded_infer_model,
           sess,
           output_infer,
           ref_file=None,
@@ -234,14 +219,13 @@ def _single_worker_inference(model_creator,
           tgt_eos=hparams.eos)
 
 
-def _multi_worker_inference(model_creator,
-                            model_dir,
-                            inference_input_file,
-                            inference_output_file,
-                            hparams,
-                            num_workers,
-                            jobid,
-                            scope=None):
+def multi_worker_inference(infer_model,
+                           ckpt,
+                           inference_input_file,
+                           inference_output_file,
+                           hparams,
+                           num_workers,
+                           jobid):
   """Inference using multiple workers."""
   assert num_workers > 1
 
@@ -259,23 +243,20 @@ def _multi_worker_inference(model_creator,
   end_position = min(start_position + load_per_worker, total_load)
   infer_data = infer_data[start_position:end_position]
 
-  (infer_graph, infer_model, infer_src_placeholder,
-   infer_batch_size_placeholder, infer_iterator) = (create_infer_model(
-       model_creator, hparams, scope))
-
-  with tf.Session(graph=infer_graph, config=utils.get_config_proto()) as sess:
-    model_helper.create_or_load_model(
-        infer_model, model_dir, sess, hparams.out_dir, "infer")
-    sess.run(infer_iterator.initializer,
+  with tf.Session(
+      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+    loaded_infer_model = model_helper.load_model(
+        infer_model.model, ckpt, sess, "infer")
+    sess.run(infer_model.iterator.initializer,
              {
-                 infer_src_placeholder: infer_data,
-                 infer_batch_size_placeholder: hparams.infer_batch_size
+                 infer_model.src_placeholder: infer_data,
+                 infer_model.batch_size_placeholder: hparams.infer_batch_size
              })
     # Decode
     utils.print_out("# Start decoding")
     nmt_utils.decode_and_evaluate(
         "infer",
-        infer_model,
+        loaded_infer_model,
         sess,
         output_infer,
         ref_file=None,
@@ -284,7 +265,7 @@ def _multi_worker_inference(model_creator,
         beam_width=hparams.beam_width,
         tgt_eos=hparams.eos)
 
-    # Change file name to indicate the file writting is completed.
+    # Change file name to indicate the file writing is completed.
     tf.gfile.Rename(output_infer, output_infer_done, overwrite=True)
 
     # Job 0 is responsible for the clean up.

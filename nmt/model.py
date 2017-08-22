@@ -44,17 +44,21 @@ class BaseModel(object):
                source_vocab_table,
                target_vocab_table,
                reverse_target_vocab_table=None,
-               scope=None):
+               scope=None,
+               single_cell_fn=None):
     """Create the model.
 
     Args:
       hparams: Hyperparameter configurations.
+      mode: TRAIN | EVAL | INFER
       iterator: Dataset Iterator that feeds data.
       source_vocab_table: Lookup table mapping source words to ids.
       target_vocab_table: Lookup table mapping target words to ids.
       reverse_target_vocab_table: Lookup table mapping ids to target words. Only
         required in INFER mode. Defaults to None.
       scope: scope of the model.
+      single_cell_fn: allow for adding customized cell. When not specified,
+        we default to model_helper._single_cell
     """
     assert isinstance(iterator, iterator_utils.BatchedInput)
     self.iterator = iterator
@@ -69,8 +73,8 @@ class BaseModel(object):
     self.time_major = hparams.time_major
 
     # Initializer
-    initializer = tf.random_uniform_initializer(
-        -hparams.init_weight, hparams.init_weight, seed=hparams.random_seed)
+    initializer = model_helper.get_initializer(
+        hparams.init_op, hparams.random_seed, hparams.init_weight)
     tf.get_variable_scope().set_initializer(initializer)
 
     # Embeddings
@@ -83,6 +87,10 @@ class BaseModel(object):
       with tf.variable_scope("decoder/output_projection"):
         self.output_layer = layers_core.Dense(
             hparams.tgt_vocab_size, use_bias=False, name="output_projection")
+
+    # To make it flexible for external code to add other cell types
+    # If not specified, we will later use model_helper._single_cell
+    self.single_cell_fn = single_cell_fn
 
     ## Train graph
     res = self.build_graph(hparams, scope=scope)
@@ -141,8 +149,7 @@ class BaseModel(object):
           colocate_gradients_with_ops=hparams.colocate_gradients_with_ops)
 
       clipped_gradients, gradient_norm_summary = model_helper.gradient_clip(
-          gradients, params,
-          max_gradient_norm=hparams.max_gradient_norm)
+          gradients, max_gradient_norm=hparams.max_gradient_norm)
 
       self.update = opt.apply_gradients(
           zip(clipped_gradients, params), global_step=self.global_step)
@@ -174,6 +181,7 @@ class BaseModel(object):
             tgt_vocab_size=self.tgt_vocab_size,
             src_embed_size=hparams.num_units,
             tgt_embed_size=hparams.num_units,
+            num_partitions=hparams.num_embeddings_partitions,
             scope=scope,))
 
   def train(self, sess):
@@ -261,7 +269,8 @@ class BaseModel(object):
         dropout=hparams.dropout,
         num_gpus=hparams.num_gpus,
         mode=self.mode,
-        base_gpu=base_gpu)
+        base_gpu=base_gpu,
+        single_cell_fn=self.single_cell_fn)
 
   def _build_decoder(self, encoder_outputs, encoder_state, hparams):
     """Build and run a RNN decoder with a final projection layer.
@@ -576,7 +585,8 @@ class Model(BaseModel):
         forget_bias=hparams.forget_bias,
         dropout=hparams.dropout,
         num_gpus=hparams.num_gpus,
-        mode=self.mode)
+        mode=self.mode,
+        single_cell_fn=self.single_cell_fn)
 
     # For beam search, we need to replicate encoder infos beam_width times
     if self.mode == tf.contrib.learn.ModeKeys.INFER and hparams.beam_width > 0:
