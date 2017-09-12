@@ -220,7 +220,7 @@ same weights; however, in practice, we often use two different RNN parameters
 encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units)
 
 # Run Dynamic RNN
-#   encoder_outpus: [max_time, batch_size, num_units]
+#   encoder_outputs: [max_time, batch_size, num_units]
 #   encoder_state: [batch_size, num_units]
 encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
     encoder_cell, encoder_emb_inp,
