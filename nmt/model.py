@@ -138,7 +138,7 @@ class BaseModel(object):
       inv_decay = warmup_factor**(
           tf.to_float(warmup_steps - self.global_step))
       self.learning_rate = tf.cond(
-        self.global_step < hparams.learning_rate_warmup_steps,
+        self.global_step < warmup_steps,
         lambda: inv_decay * self.learning_rate,
         lambda: self.learning_rate,
         name="learning_rate_decay_warump_cond")
