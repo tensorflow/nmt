@@ -832,9 +832,8 @@ than using *feed_dict* and are the standard for both single-machine and
 distributed training.
 
 Starting in TensorFlow 1.2, there is a new system available for reading data
-into TensorFlow models: dataset iterators, as found in the **tf.contrib.data**
-module for versions <= 1.3 and **tf.data** module for versions >= 1.4. Data 
-iterators are flexible, easy to reason about and to manipulate, and
+into TensorFlow models: dataset iterators, as found in the **tf.data**
+module. Data iterators are flexible, easy to reason about and to manipulate, and
 provide efficiency and multithreading by leveraging the TensorFlow C++ runtime.
 
 A **dataset** can be created from a batch data Tensor, a filename, or a Tensor
