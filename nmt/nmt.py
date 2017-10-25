@@ -87,16 +87,27 @@ def add_arguments(parser):
   parser.add_argument("--optimizer", type=str, default="sgd", help="sgd | adam")
   parser.add_argument("--learning_rate", type=float, default=1.0,
                       help="Learning rate. Adam: 0.001 | 0.0001")
-  parser.add_argument("--learning_rate_warmup_steps", type=int, default=0,
+  parser.add_argument("--warmup_steps", type=int, default=0,
                       help="How many steps we inverse-decay learning.")
-  parser.add_argument("--learning_rate_warmup_factor", type=float, default=1.0,
-                      help="The inverse decay factor for each warmup step.")
+  parser.add_argument("--warmup_scheme", type=str, default="t2t", help="""\
+      How to warmup learning rates. Options include:
+        t2t: Tensor2Tensor's way, start with lr 100 times smaller, then
+             exponentiate until the specified lr.\
+      """)
   parser.add_argument("--start_decay_step", type=int, default=0,
                       help="When we start to decay")
   parser.add_argument("--decay_steps", type=int, default=10000,
                       help="How frequent we decay")
-  parser.add_argument("--decay_factor", type=float, default=0.98,
+  parser.add_argument("--decay_factor", type=float, default=1.0,
                       help="How much we decay.")
+  parser.add_argument(
+      "--learning_rate_decay_scheme", type=str, default="", help="""\
+      If specified, overwrite start_decay_step, decay_steps, decay_factor.
+      Options include:
+        luong: after 1/2 num train steps, we start halving the learning rate
+        for 5 times before finishing.\
+      """)
+
   parser.add_argument(
       "--num_train_steps", type=int, default=12000, help="Num steps to train.")
   parser.add_argument("--colocate_gradients_with_ops", type="bool", nargs="?",
@@ -162,7 +173,7 @@ def add_arguments(parser):
 
   # Default settings works well (rarely need to change)
   parser.add_argument("--unit_type", type=str, default="lstm",
-                      help="lstm | gru | layer_norm_lstm")
+                      help="lstm | gru | layer_norm_lstm | nas")
   parser.add_argument("--forget_bias", type=float, default=1.0,
                       help="Forget bias for BasicLSTMCell.")
   parser.add_argument("--dropout", type=float, default=0.2,
@@ -288,11 +299,12 @@ def create_hparams(flags):
       init_weight=flags.init_weight,
       max_gradient_norm=flags.max_gradient_norm,
       learning_rate=flags.learning_rate,
-      learning_rate_warmup_steps = flags.learning_rate_warmup_steps,
-      learning_rate_warmup_factor = flags.learning_rate_warmup_factor,
+      warmup_steps=flags.warmup_steps,
+      warmup_scheme=flags.warmup_scheme,
       start_decay_step=flags.start_decay_step,
       decay_factor=flags.decay_factor,
       decay_steps=flags.decay_steps,
+      learning_rate_decay_scheme=flags.learning_rate_decay_scheme,
       colocate_gradients_with_ops=flags.colocate_gradients_with_ops,
 
       # Data constraints
@@ -316,7 +328,6 @@ def create_hparams(flags):
       bpe_delimiter=flags.bpe_delimiter,
       subword_option=flags.subword_option,
       check_special_token=flags.check_special_token,
-
 
       # Misc
       forget_bias=flags.forget_bias,
@@ -343,9 +354,9 @@ def extend_hparams(hparams):
     raise ValueError("For gnmt attention architecture, "
                      "num_layers %d should be >= 2" % hparams.num_layers)
 
-  if hparams.subword_option not in [None, "spm", "bpe"]:
-    raise ValueError("subword option must be either None, spm, or bpe")
-  if hparams.bpe_delimiter is not None and hparams.bpe_delimiter != "@@":
+  if hparams.subword_option and hparams.subword_option not in ["spm", "bpe"]:
+    raise ValueError("subword option must be either spm, or bpe")
+  if hparams.bpe_delimiter and hparams.bpe_delimiter != "@@":
     raise ValueError("BPE delimiter value must be '@@' %s",
                      hparams.bpe_delimiter)
   if hparams.bpe_delimiter == "@@":
@@ -495,7 +506,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
 
   # Load hparams.
   hparams = create_or_load_hparams(
-    out_dir, default_hparams, flags.hparams_path, save_hparams=(jobid==0))
+      out_dir, default_hparams, flags.hparams_path, save_hparams=(jobid==0))
 
   if flags.inference_input_file:
     # Inference indices

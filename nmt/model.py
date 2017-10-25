@@ -113,55 +113,26 @@ class BaseModel(object):
       self.predict_count = tf.reduce_sum(
           self.iterator.target_sequence_length)
 
-    ## Learning rate
-    warmup_steps = hparams.learning_rate_warmup_steps
-    warmup_factor = hparams.learning_rate_warmup_factor
-    print("  start_decay_step=%d, learning_rate=%g, decay_steps %d, "
-          "decay_factor %g, learning_rate_warmup_steps=%d, "
-          "learning_rate_warmup_factor=%g, starting_learning_rate=%g" %
-          (hparams.start_decay_step, hparams.learning_rate, hparams.decay_steps,
-           hparams.decay_factor, warmup_steps, warmup_factor,
-           (hparams.learning_rate * warmup_factor ** warmup_steps)))
     self.global_step = tf.Variable(0, trainable=False)
-
     params = tf.trainable_variables()
 
     # Gradients and SGD update operation for training the model.
     # Arrage for the embedding vars to appear at the beginning.
     if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
       self.learning_rate = tf.constant(hparams.learning_rate)
+      # warm-up
+      self.learning_rate = self._get_learning_rate_warmup(hparams)
+      # decay
+      self.learning_rate = self._get_learning_rate_decay(hparams)
 
-      # Apply inverse decay if global steps less than warmup steps.
-      # Inspired by https://arxiv.org/pdf/1706.03762.pdf (Section 5.3)
-      # When step < warmup_steps,
-      #   learing_rate *= warmup_factor ** (warmup_steps - step)
-      inv_decay = warmup_factor**(
-          tf.to_float(warmup_steps - self.global_step))
-      self.learning_rate = tf.cond(
-        self.global_step < warmup_steps,
-        lambda: inv_decay * self.learning_rate,
-        lambda: self.learning_rate,
-        name="learning_rate_decay_warump_cond")
-
+      # Optimizer
       if hparams.optimizer == "sgd":
-        self.learning_rate = tf.cond(
-            self.global_step < hparams.start_decay_step,
-            lambda: self.learning_rate,
-            lambda: tf.train.exponential_decay(
-                self.learning_rate,
-                (self.global_step - hparams.start_decay_step),
-                hparams.decay_steps,
-                hparams.decay_factor,
-                staircase=True),
-            name="learning_rate")
         opt = tf.train.GradientDescentOptimizer(self.learning_rate)
         tf.summary.scalar("lr", self.learning_rate)
       elif hparams.optimizer == "adam":
-        assert float(
-            hparams.learning_rate
-        ) <= 0.001, "! High Adam learning rate %g" % hparams.learning_rate
         opt = tf.train.AdamOptimizer(self.learning_rate)
 
+      # Gradients
       gradients = tf.gradients(
           self.train_loss,
           params,
@@ -190,6 +161,56 @@ class BaseModel(object):
     for param in params:
       utils.print_out("  %s, %s, %s" % (param.name, str(param.get_shape()),
                                         param.op.device))
+
+  def _get_learning_rate_warmup(self, hparams):
+    """Get learning rate warmup."""
+    warmup_steps = hparams.warmup_steps
+    warmup_scheme = hparams.warmup_scheme
+    utils.print_out("  learning_rate=%g, warmup_steps=%d, warmup_scheme=%s" %
+                    (hparams.learning_rate, warmup_steps, warmup_scheme))
+
+    # Apply inverse decay if global steps less than warmup steps.
+    # Inspired by https://arxiv.org/pdf/1706.03762.pdf (Section 5.3)
+    # When step < warmup_steps,
+    #   learing_rate *= warmup_factor ** (warmup_steps - step)
+    if warmup_scheme == "t2t":
+      # 0.01^(1/warmup_steps): we start with a lr, 100 times smaller
+      warmup_factor = tf.exp(tf.log(0.01) / warmup_steps)
+      inv_decay = warmup_factor**(
+          tf.to_float(warmup_steps - self.global_step))
+    else:
+      raise ValueError("Unknown warmup scheme %s" % warmup_scheme)
+
+    return tf.cond(
+        self.global_step < hparams.warmup_steps,
+        lambda: inv_decay * self.learning_rate,
+        lambda: self.learning_rate,
+        name="learning_rate_warump_cond")
+
+  def _get_learning_rate_decay(self, hparams):
+    """Get learning rate decay."""
+    if (hparams.learning_rate_decay_scheme and
+        hparams.learning_rate_decay_scheme == "luong"):
+      start_decay_step = int(hparams.num_train_steps / 2)
+      decay_steps = int(hparams.num_train_steps / 10)  # decay 5 times
+      decay_factor = 0.5
+    else:
+      start_decay_step = hparams.start_decay_step
+      decay_steps = hparams.decay_steps
+      decay_factor = hparams.decay_factor
+    print("  decay_scheme=%s, start_decay_step=%d, decay_steps %d, "
+          "decay_factor %g" %
+          (hparams.learning_rate_decay_scheme,
+           hparams.start_decay_step, hparams.decay_steps, hparams.decay_factor))
+
+    return tf.cond(
+        self.global_step < start_decay_step,
+        lambda: self.learning_rate,
+        lambda: tf.train.exponential_decay(
+            self.learning_rate,
+            (self.global_step - start_decay_step),
+            decay_steps, decay_factor, staircase=True),
+        name="learning_rate_decay_cond")
 
   def init_embeddings(self, hparams, scope):
     """Init embeddings."""
@@ -291,6 +312,19 @@ class BaseModel(object):
         base_gpu=base_gpu,
         single_cell_fn=self.single_cell_fn)
 
+  def _get_infer_maximum_iterations(self, hparams, source_sequence_length):
+    """Maximum decoding steps at inference time."""
+    if hparams.tgt_max_len_infer:
+      maximum_iterations = hparams.tgt_max_len_infer
+      utils.print_out("  decoding maximum_iterations %d" % maximum_iterations)
+    else:
+      # TODO(thangluong): add decoding_length_factor flag
+      decoding_length_factor = 2.0
+      max_encoder_length = tf.reduce_max(source_sequence_length)
+      maximum_iterations = tf.to_int32(tf.round(
+          tf.to_float(max_encoder_length) * decoding_length_factor))
+    return maximum_iterations
+
   def _build_decoder(self, encoder_outputs, encoder_state, hparams):
     """Build and run a RNN decoder with a final projection layer.
 
@@ -314,15 +348,8 @@ class BaseModel(object):
     iterator = self.iterator
 
     # maximum_iteration: The maximum decoding steps.
-    if hparams.tgt_max_len_infer:
-      maximum_iterations = hparams.tgt_max_len_infer
-      utils.print_out("  decoding maximum_iterations %d" % maximum_iterations)
-    else:
-      # TODO(thangluong): add decoding_length_factor flag
-      decoding_length_factor = 2.0
-      max_encoder_length = tf.reduce_max(iterator.source_sequence_length)
-      maximum_iterations = tf.to_int32(tf.round(
-          tf.to_float(max_encoder_length) * decoding_length_factor))
+    maximum_iterations = self._get_infer_maximum_iterations(
+        hparams, iterator.source_sequence_length)
 
     ## Decoder.
     with tf.variable_scope("decoder") as decoder_scope:
@@ -517,7 +544,8 @@ class Model(BaseModel):
             encoder_emb_inp,
             dtype=dtype,
             sequence_length=iterator.source_sequence_length,
-            time_major=self.time_major)
+            time_major=self.time_major,
+            swap_memory=True)
       elif hparams.encoder_type == "bi":
         num_bi_layers = int(num_layers / 2)
         num_bi_residual_layers = int(num_residual_layers / 2)
@@ -582,7 +610,8 @@ class Model(BaseModel):
         inputs,
         dtype=dtype,
         sequence_length=sequence_length,
-        time_major=self.time_major)
+        time_major=self.time_major,
+        swap_memory=True)
 
     return tf.concat(bi_outputs, -1), bi_state
 
