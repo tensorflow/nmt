@@ -191,6 +191,8 @@ def train(hparams, scope=None, target_session=""):
   # TensorFlow model
   config_proto = utils.get_config_proto(
       log_device_placement=log_device_placement)
+  config_proto.inter_op_parallelism_threads = hparams.num_inter_threads
+  config_proto.intra_op_parallelism_threads = hparams.num_intra_threads
 
   train_sess = tf.Session(
       target=target_session, config=config_proto, graph=train_model.graph)
