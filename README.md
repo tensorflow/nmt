@@ -2,7 +2,8 @@
 
 *Authors: Thang Luong, Eugene Brevdo, Rui Zhao*
 
-*This version of the tutorial requires [TensorFlow Version 1.4+](https://github.com/tensorflow/tensorflow/#installation).*
+*This version of the tutorial requires [TensorFlow Version 1.4+](https://github.com/tensorflow/tensorflow/#installation). 
+Warning: There is a [bug fix for Beam Search](https://github.com/tensorflow/tensorflow/commit/18f89c81d288f191abd56501ec6f86fe29265bdd#diff-b012cb799623e95f3088242d9bb17d58) that is not in TensorFlow 1.4.*
 
 - [Introduction](#introduction)
 - [Basic](#basic)
