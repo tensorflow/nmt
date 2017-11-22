@@ -512,9 +512,13 @@ class BaseModel(object):
     """
     _, infer_summary, _, sample_words = self.infer(sess)
 
-    # make sure outputs is of shape [batch_size, time]
+    # make sure outputs is of shape [batch_size, time] or [beam_width,
+    # batch_size, time] when using beam search.
     if self.time_major:
       sample_words = sample_words.transpose()
+    elif sample_words.ndim == 3:  # beam search output in [batch_size,
+                                  # time, beam_width] shape.
+      sample_words = sample_words.transpose([2, 0, 1])
     return sample_words, infer_summary
 
 
