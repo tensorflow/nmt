@@ -83,7 +83,6 @@ class BaseModel(object):
     tf.get_variable_scope().set_initializer(initializer)
 
     # Embeddings
-    # TODO(ebrevdo): Only do this if the mode is TRAIN?
     self.init_embeddings(hparams, scope)
     self.batch_size = tf.size(self.iterator.source_sequence_length)
 
@@ -230,6 +229,10 @@ class BaseModel(object):
             src_embed_size=hparams.num_units,
             tgt_embed_size=hparams.num_units,
             num_partitions=hparams.num_embeddings_partitions,
+            src_vocab_file=hparams.src_vocab_file,
+            tgt_vocab_file=hparams.tgt_vocab_file,
+            src_embed_file=hparams.src_embed_file,
+            tgt_embed_file=hparams.tgt_embed_file,
             scope=scope,))
 
   def train(self, sess):

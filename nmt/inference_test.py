@@ -64,8 +64,8 @@ class InferenceTest(tf.test.TestCase):
         attention_architecture="",
         use_residual=False,)
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer")
@@ -88,8 +88,8 @@ class InferenceTest(tf.test.TestCase):
         beam_width=2,
     )
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "multi_basic_infer")
@@ -109,8 +109,8 @@ class InferenceTest(tf.test.TestCase):
         attention_architecture="standard",
         use_residual=False,)
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "attention_infer")
@@ -130,8 +130,8 @@ class InferenceTest(tf.test.TestCase):
         attention_architecture="standard",
         use_residual=False,)
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "multi_worker_infer")
@@ -170,8 +170,8 @@ class InferenceTest(tf.test.TestCase):
         use_residual=False,
         inference_indices=[0])
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer_with_indices")
@@ -194,8 +194,8 @@ class InferenceTest(tf.test.TestCase):
     # TODO(rzhao): Make infer indices support batch_size > 1.
     hparams.infer_batch_size = 1
     vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.add_hparam("src_vocab_file", vocab_prefix + "." + hparams.src)
-    hparams.add_hparam("tgt_vocab_file", vocab_prefix + "." + hparams.tgt)
+    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(),

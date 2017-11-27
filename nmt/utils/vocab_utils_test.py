@@ -48,10 +48,7 @@ class VocabUtilsTest(tf.test.TestCase):
     # create a new vocab file
     self.assertEqual(len(vocab) + 3, vocab_size)
     self.assertEqual(os.path.join(out_dir, "vocab_file"), new_vocab_file)
-    new_vocab = []
-    with codecs.getreader("utf-8")(tf.gfile.GFile(new_vocab_file, "rb")) as f:
-      for line in f:
-        new_vocab.append(line.strip())
+    new_vocab, _ = vocab_utils.load_vocab(new_vocab_file)
     self.assertEqual(
         [vocab_utils.UNK, vocab_utils.SOS, vocab_utils.EOS] + vocab, new_vocab)
 

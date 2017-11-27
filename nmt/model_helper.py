@@ -4,6 +4,7 @@ from __future__ import print_function
 import collections
 import time
 
+import numpy as np
 import tensorflow as tf
 
 from tensorflow.python.ops import lookup_ops
@@ -211,6 +212,38 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
       iterator=iterator)
 
 
+def _create_pretrained_emb_from_txt(
+    vocab_file, embed_file, num_trainable_tokens=3, dtype=tf.float32,
+    scope=None):
+  """Load pretrain embeding from embed_file, and return an embedding matrix.
+
+  Args:
+    embed_file: Path to a Glove formated embedding txt file.
+    num_trainable_tokens: Make the first n tokens in the vocab file as trainable
+      variables. Default is 3, which is "<unk>", "<s>" and "</s>".
+  """
+  vocab, _ = vocab_utils.load_vocab(vocab_file)
+  trainable_tokens = vocab[:num_trainable_tokens]
+
+  utils.print_out('# Using pretrained embedding: %s.' % embed_file)
+  utils.print_out('  with trainable tokens: ')
+
+  emb_dict, emb_size = vocab_utils.load_embed_txt(embed_file)
+  for token in trainable_tokens:
+    utils.print_out('    %s' % token)
+    if token not in emb_dict:
+      emb_dict[token] = [0.0] * emb_size
+
+  emb_mat = np.array(
+      [emb_dict[token] for token in vocab], dtype=dtype.as_numpy_dtype())
+  emb_mat = tf.constant(emb_mat)
+  emb_mat_const = tf.slice(emb_mat, [num_trainable_tokens, 0], [-1, -1])
+  with tf.variable_scope(scope or "pretrain_embeddings", dtype=dtype) as scope:
+    emb_mat_var = tf.get_variable(
+        "emb_mat_var", [num_trainable_tokens, emb_size])
+  return tf.concat([emb_mat_var, emb_mat_const], 0)
+
+
 def create_emb_for_encoder_and_decoder(share_vocab,
                                        src_vocab_size,
                                        tgt_vocab_size,
@@ -218,6 +251,10 @@ def create_emb_for_encoder_and_decoder(share_vocab,
                                        tgt_embed_size,
                                        dtype=tf.float32,
                                        num_partitions=0,
+                                       src_vocab_file=None,
+                                       tgt_vocab_file=None,
+                                       src_embed_file=None,
+                                       tgt_embed_file=None,
                                        scope=None):
   """Create embedding matrix for both encoder and decoder.
 
@@ -252,6 +289,10 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     # jobs.
     partitioner = tf.fixed_size_partitioner(num_partitions)
 
+  if (src_embed_file or tgt_embed_file) and partitioner:
+    raise ValueError(
+        "Cann't set num_partitions > 1 when using pretrained embedding")
+
   with tf.variable_scope(
       scope or "embeddings", dtype=dtype, partitioner=partitioner) as scope:
     # Share embedding
@@ -260,18 +301,33 @@ def create_emb_for_encoder_and_decoder(share_vocab,
         raise ValueError("Share embedding but different src/tgt vocab sizes"
                          " %d vs. %d" % (src_vocab_size, tgt_vocab_size))
       utils.print_out("# Use the same source embeddings for target")
-      embedding = tf.get_variable(
-          "embedding_share", [src_vocab_size, src_embed_size], dtype)
+      vocab_file = src_vocab_file or tgt_vocab_file
+      emb_file = src_embed_file or tgt_embed_file
+
+      if vocab_file and emb_file:
+        assert src_embed_size == tgt_embed_size
+        embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
+      else:
+        embedding = tf.get_variable(
+            "embedding_share", [src_vocab_size, src_embed_size], dtype)
       embedding_encoder = embedding
       embedding_decoder = embedding
     else:
       with tf.variable_scope("encoder", partitioner=partitioner):
-        embedding_encoder = tf.get_variable(
-            "embedding_encoder", [src_vocab_size, src_embed_size], dtype)
+        if src_vocab_file and src_embed_file:
+          embedding_encoder = _create_pretrained_emb_from_txt(
+              src_vocab_file, src_embed_file)
+        else:
+          embedding_encoder = tf.get_variable(
+              "embedding_encoder", [src_vocab_size, src_embed_size], dtype)
 
       with tf.variable_scope("decoder", partitioner=partitioner):
-        embedding_decoder = tf.get_variable(
-            "embedding_decoder", [tgt_vocab_size, tgt_embed_size], dtype)
+        if tgt_vocab_file and tgt_embed_file:
+          embedding_decoder = _create_pretrained_emb_from_txt(
+              tgt_vocab_file, tgt_embed_file)
+        else:
+          embedding_decoder = tf.get_variable(
+              "embedding_decoder", [tgt_vocab_size, tgt_embed_size], dtype)
 
   return embedding_encoder, embedding_decoder
 

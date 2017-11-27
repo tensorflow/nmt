@@ -95,6 +95,10 @@ def create_test_hparams(unit_type="lstm",
       tgt_vocab_size=5,
       eos="eos",
       sos="sos",
+      src_vocab_file="",
+      tgt_vocab_file="",
+      src_embed_file="",
+      tgt_embed_file="",
 
       # For inference.py test
       source_reverse=False,

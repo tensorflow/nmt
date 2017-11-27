@@ -148,8 +148,11 @@ def add_arguments(parser):
 
   # Vocab
   parser.add_argument("--vocab_prefix", type=str, default=None, help="""\
-      Vocab prefix, expect files with src/tgt suffixes.If None, extract from
-      train files.\
+      Vocab prefix, expect files with src/tgt suffixes.\
+      """)
+  parser.add_argument("--embed_prefix", type=str, default=None, help="""\
+      Pretrained embedding prefix, expect files with src/tgt suffixes.
+      The embedding files should be Glove formated txt files.\
       """)
   parser.add_argument("--sos", type=str, default="<s>",
                       help="Start-of-sentence symbol.")
@@ -278,6 +281,7 @@ def create_hparams(flags):
       dev_prefix=flags.dev_prefix,
       test_prefix=flags.test_prefix,
       vocab_prefix=flags.vocab_prefix,
+      embed_prefix=flags.embed_prefix,
       out_dir=flags.out_dir,
 
       # Networks
@@ -417,6 +421,20 @@ def extend_hparams(hparams):
   hparams.add_hparam("tgt_vocab_size", tgt_vocab_size)
   hparams.add_hparam("src_vocab_file", src_vocab_file)
   hparams.add_hparam("tgt_vocab_file", tgt_vocab_file)
+
+  # Pretrained Embeddings:
+  hparams.add_hparam("src_embed_file", "")
+  hparams.add_hparam("tgt_embed_file", "")
+  if hparams.embed_prefix:
+    src_embed_file = hparams.embed_prefix + "." + hparams.src
+    tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
+
+    if tf.gfile.Exists(src_embed_file):
+      hparams.src_embed_file = src_embed_file
+
+    if tf.gfile.Exists(tgt_embed_file):
+      hparams.tgt_embed_file = tgt_embed_file
+
 
   # Check out_dir
   if not tf.gfile.Exists(hparams.out_dir):
