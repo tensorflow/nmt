@@ -930,7 +930,7 @@ get its values, and initialize it.
 ``` python
 batched_iterator = batched_dataset.make_initializable_iterator()
 
-((source, source_lengths), (target, target_lenghts)) = batched_iterator.get_next()
+((source, source_lengths), (target, target_lengths)) = batched_iterator.get_next()
 
 # At initialization time.
 session.run(batched_iterator.initializer, feed_dict={...})
