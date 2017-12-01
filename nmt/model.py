@@ -154,7 +154,8 @@ class BaseModel(object):
       self.infer_summary = self._get_infer_summary(hparams)
 
     # Saver
-    self.saver = tf.train.Saver(tf.global_variables())
+    self.saver = tf.train.Saver(
+        tf.global_variables(), max_to_keep=hparams.num_keep_ckpts)
 
     # Print trainable variables
     utils.print_out("# Trainable variables")

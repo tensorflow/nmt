@@ -336,6 +336,7 @@ def create_hparams(flags):
       log_device_placement=flags.log_device_placement,
       random_seed=flags.random_seed,
       override_loaded_hparams=flags.override_loaded_hparams,
+      num_keep_ckpts=5,  # saves 5 checkpoints by default.
   )
 
 
@@ -422,7 +423,6 @@ def extend_hparams(hparams):
 
     if tf.gfile.Exists(tgt_embed_file):
       hparams.tgt_embed_file = tgt_embed_file
-
 
   # Check out_dir
   if not tf.gfile.Exists(hparams.out_dir):
