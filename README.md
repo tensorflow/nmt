@@ -225,7 +225,7 @@ same weights; however, in practice, we often use two different RNN parameters
 encoder_cell = tf.nn.rnn_cell.BasicLSTMCell(num_units)
 
 # Run Dynamic RNN
-#   encoder_outpus: [max_time, batch_size, num_units]
+#   encoder_outputs: [max_time, batch_size, num_units]
 #   encoder_state: [batch_size, num_units]
 encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
     encoder_cell, encoder_emb_inp,
@@ -930,7 +930,7 @@ get its values, and initialize it.
 ``` python
 batched_iterator = batched_dataset.make_initializable_iterator()
 
-((source, source_lengths), (target, target_lenghts)) = batched_iterator.get_next()
+((source, source_lengths), (target, target_lengths)) = batched_iterator.get_next()
 
 # At initialization time.
 session.run(batched_iterator.initializer, feed_dict={...})
