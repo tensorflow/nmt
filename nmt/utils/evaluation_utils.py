@@ -165,7 +165,7 @@ def _moses_bleu(multi_bleu_script, tgt_test, trans_file, subword_option=None):
     tgt_test = debpe_tgt_test
   elif subword_option == "spm":
     despm_tgt_test = tgt_test + ".despm"
-    if not os.path.exists(debpe_tgt_test):
+    if not os.path.exists(despm_tgt_test):
       subprocess.call("cp %s %s" % (tgt_test, despm_tgt_test))
       subprocess.call("sed s/ //g %s" % (despm_tgt_test))
       subprocess.call(u"sed s/^\u2581/g %s" % (despm_tgt_test))
