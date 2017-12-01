@@ -38,7 +38,6 @@ class IteratorUtilsTest(tf.test.TestCase):
     hparams = tf.contrib.training.HParams(
         random_seed=3,
         num_buckets=5,
-        source_reverse=False,
         eos="eos",
         sos="sos")
     batch_size = 2
@@ -51,7 +50,6 @@ class IteratorUtilsTest(tf.test.TestCase):
         batch_size=batch_size,
         sos=hparams.sos,
         eos=hparams.eos,
-        source_reverse=hparams.source_reverse,
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=src_max_len)
@@ -116,7 +114,6 @@ class IteratorUtilsTest(tf.test.TestCase):
     hparams = tf.contrib.training.HParams(
         random_seed=3,
         num_buckets=5,
-        source_reverse=False,
         eos="eos",
         sos="sos")
     batch_size = 2
@@ -129,7 +126,6 @@ class IteratorUtilsTest(tf.test.TestCase):
         batch_size=batch_size,
         sos=hparams.sos,
         eos=hparams.eos,
-        source_reverse=hparams.source_reverse,
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=src_max_len,
@@ -181,7 +177,6 @@ class IteratorUtilsTest(tf.test.TestCase):
     hparams = tf.contrib.training.HParams(
         random_seed=3,
         num_buckets=5,
-        source_reverse=False,
         eos="eos",
         sos="sos")
     batch_size = 2
@@ -195,7 +190,6 @@ class IteratorUtilsTest(tf.test.TestCase):
         batch_size=batch_size,
         sos=hparams.sos,
         eos=hparams.eos,
-        source_reverse=hparams.source_reverse,
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=src_max_len,
@@ -280,7 +274,6 @@ class IteratorUtilsTest(tf.test.TestCase):
         tf.constant(["c c a", "c a", "d", "f e a g"]))
     hparams = tf.contrib.training.HParams(
         random_seed=3,
-        source_reverse=False,
         eos="eos",
         sos="sos")
     batch_size = 2
@@ -290,7 +283,6 @@ class IteratorUtilsTest(tf.test.TestCase):
         src_vocab_table=src_vocab_table,
         batch_size=batch_size,
         eos=hparams.eos,
-        source_reverse=hparams.source_reverse,
         src_max_len=src_max_len)
     table_initializer = tf.tables_initializer()
     source = iterator.source

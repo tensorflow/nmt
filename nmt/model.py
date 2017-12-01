@@ -189,26 +189,27 @@ class BaseModel(object):
 
   def _get_learning_rate_decay(self, hparams):
     """Get learning rate decay."""
-    if hparams.learning_rate_decay_scheme in ["luong", "luong10"]:
-      start_factor = 2
-      start_decay_step = int(hparams.num_train_steps / start_factor)
+    if hparams.decay_scheme == "luong10":
+      start_decay_step = int(hparams.num_train_steps / 2)
+      remain_steps = hparams.num_train_steps - start_decay_step
+      decay_steps = int(remain_steps / 10)  # decay 10 times
       decay_factor = 0.5
-
-      # decay 5 times
-      if hparams.learning_rate_decay_scheme == "luong":
-        decay_steps = int(hparams.num_train_steps / (5 * start_factor))
-      # decay 10 times
-      elif hparams.learning_rate_decay_scheme == "luong10":
-        decay_steps = int(hparams.num_train_steps / (10 * start_factor))
-    else:
-      start_decay_step = hparams.start_decay_step
-      decay_steps = hparams.decay_steps
-      decay_factor = hparams.decay_factor
+    elif hparams.decay_scheme == "luong234":
+      start_decay_step = int(hparams.num_train_steps * 2 / 3)
+      remain_steps = hparams.num_train_steps - start_decay_step
+      decay_steps = int(remain_steps / 4)  # decay 4 times
+      decay_factor = 0.5
+    elif not hparams.decay_scheme:  # no decay
+      start_decay_step = hparams.num_train_steps
+      decay_steps = 0
+      decay_factor = 1.0
+    elif hparams.decay_scheme:
+      raise ValueError("Unknown decay scheme %s" % hparams.decay_scheme)
     utils.print_out("  decay_scheme=%s, start_decay_step=%d, decay_steps %d, "
-                    "decay_factor %g" % (hparams.learning_rate_decay_scheme,
-                                         hparams.start_decay_step,
-                                         hparams.decay_steps,
-                                         hparams.decay_factor))
+                    "decay_factor %g" % (hparams.decay_scheme,
+                                         start_decay_step,
+                                         decay_steps,
+                                         decay_factor))
 
     return tf.cond(
         self.global_step < start_decay_step,

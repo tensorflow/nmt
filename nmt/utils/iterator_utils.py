@@ -34,7 +34,6 @@ class BatchedInput(
 def get_infer_iterator(src_dataset,
                        src_vocab_table,
                        batch_size,
-                       source_reverse,
                        eos,
                        src_max_len=None):
   src_eos_id = tf.cast(src_vocab_table.lookup(tf.constant(eos)), tf.int32)
@@ -45,8 +44,6 @@ def get_infer_iterator(src_dataset,
   # Convert the word strings to ids
   src_dataset = src_dataset.map(
       lambda src: tf.cast(src_vocab_table.lookup(src), tf.int32))
-  if source_reverse:
-    src_dataset = src_dataset.map(lambda src: tf.reverse(src, axis=[0]))
   # Add in the word counts.
   src_dataset = src_dataset.map(lambda src: (src, tf.size(src)))
 
@@ -85,7 +82,6 @@ def get_iterator(src_dataset,
                  batch_size,
                  sos,
                  eos,
-                 source_reverse,
                  random_seed,
                  num_buckets,
                  src_max_len=None,
@@ -125,10 +121,6 @@ def get_iterator(src_dataset,
   if tgt_max_len:
     src_tgt_dataset = src_tgt_dataset.map(
         lambda src, tgt: (src, tgt[:tgt_max_len]),
-        num_parallel_calls=num_parallel_calls).prefetch(output_buffer_size)
-  if source_reverse:
-    src_tgt_dataset = src_tgt_dataset.map(
-        lambda src, tgt: (tf.reverse(src, axis=[0]), tgt),
         num_parallel_calls=num_parallel_calls).prefetch(output_buffer_size)
   # Convert the word strings to ids.  Word strings that are not in the
   # vocab get the lookup table's default_value integer.
