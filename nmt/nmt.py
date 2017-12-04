@@ -261,6 +261,10 @@ def add_arguments(parser):
                       help="Task id of the worker.")
   parser.add_argument("--num_workers", type=int, default=1,
                       help="Number of workers (inference only).")
+  parser.add_argument("--num_inter_threads", type=int, default=0,
+                      help="number of inter_op_parallelism_threads")
+  parser.add_argument("--num_intra_threads", type=int, default=0,
+                      help="number of intra_op_parallelism_threads")
 
 
 def create_hparams(flags):
@@ -337,6 +341,8 @@ def create_hparams(flags):
       random_seed=flags.random_seed,
       override_loaded_hparams=flags.override_loaded_hparams,
       num_keep_ckpts=5,  # saves 5 checkpoints by default.
+      num_intra_threads=FLAGS.num_intra_threads,
+      num_inter_threads=FLAGS.num_inter_threads,
   )
 
 
