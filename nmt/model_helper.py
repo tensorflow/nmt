@@ -299,9 +299,9 @@ def create_emb_for_encoder_and_decoder(share_vocab,
                          " %d vs. %d" % (src_vocab_size, tgt_vocab_size))
       utils.print_out("# Use the same source embeddings for target")
       vocab_file = src_vocab_file or tgt_vocab_file
-      emb_file = src_embed_file or tgt_embed_file
+      embed_file = src_embed_file or tgt_embed_file
 
-      if vocab_file and emb_file:
+      if vocab_file and embed_file:
         assert src_embed_size == tgt_embed_size
         embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
       else:
