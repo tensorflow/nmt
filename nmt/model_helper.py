@@ -303,7 +303,7 @@ def create_emb_for_encoder_and_decoder(share_vocab,
 
       if vocab_file and embed_file:
         assert src_embed_size == tgt_embed_size
-        embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
+        embedding = _create_pretrained_emb_from_txt(vocab_file, emb_file)
       else:
         embedding = tf.get_variable(
             "embedding_share", [src_vocab_size, src_embed_size], dtype)
