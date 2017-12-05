@@ -551,7 +551,7 @@ class Model(BaseModel):
       encoder_emb_inp = tf.nn.embedding_lookup(
           self.embedding_encoder, source)
 
-      # Encoder_outpus: [max_time, batch_size, num_units]
+      # Encoder_outputs: [max_time, batch_size, num_units]
       if hparams.encoder_type == "uni":
         utils.print_out("  num_layers = %d, num_residual_layers=%d" %
                         (num_layers, num_residual_layers))
