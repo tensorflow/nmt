@@ -248,7 +248,7 @@ def add_arguments(parser):
       beam width when using beam search decoder. If 0 (default), use standard
       decoder with greedy helper.\
       """))
-  parser.add_argument("--length_penalty_weight", type=float, default=0.0,
+  parser.add_argument("--length_penalty_weight", type=float, default=1.0,
                       help="Length penalty for beam search.")
   parser.add_argument("--num_translations_per_input", type=int, default=1,
                       help=("""\
