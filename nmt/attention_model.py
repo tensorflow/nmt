@@ -74,9 +74,8 @@ class AttentionModel(model.Model):
           "Unknown attention architecture %s" % attention_architecture)
 
     num_units = hparams.num_units
-    num_layers = hparams.num_layers
-    num_residual_layers = hparams.num_residual_layers
-    num_gpus = hparams.num_gpus
+    num_layers = self.num_decoder_layers
+    num_residual_layers = self.num_decoder_residual_layers
     beam_width = hparams.beam_width
 
     dtype = tf.float32
@@ -108,7 +107,7 @@ class AttentionModel(model.Model):
         num_residual_layers=num_residual_layers,
         forget_bias=hparams.forget_bias,
         dropout=hparams.dropout,
-        num_gpus=num_gpus,
+        num_gpus=self.num_gpus,
         mode=self.mode,
         single_cell_fn=self.single_cell_fn)
 
@@ -126,7 +125,7 @@ class AttentionModel(model.Model):
     # TODO(thangluong): do we need num_layers, num_gpus?
     cell = tf.contrib.rnn.DeviceWrapper(cell,
                                         model_helper.get_device_str(
-                                            num_layers - 1, num_gpus))
+                                            num_layers - 1, self.num_gpus))
 
     if hparams.pass_hidden_state:
       decoder_initial_state = cell.zero_state(batch_size, dtype).clone(

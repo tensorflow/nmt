@@ -68,7 +68,6 @@ class BaseModel(object):
 
     self.src_vocab_size = hparams.src_vocab_size
     self.tgt_vocab_size = hparams.tgt_vocab_size
-    self.num_layers = hparams.num_layers
     self.num_gpus = hparams.num_gpus
     self.time_major = hparams.time_major
 
@@ -76,6 +75,20 @@ class BaseModel(object):
     self.single_cell_fn = None
     if extra_args:
       self.single_cell_fn = extra_args.single_cell_fn
+
+    # Set num layers
+    self.num_encoder_layers = hparams.num_encoder_layers
+    self.num_decoder_layers = hparams.num_decoder_layers
+    assert self.num_encoder_layers
+    assert self.num_decoder_layers
+
+    # Set num residual layers
+    if hasattr(hparams, "num_residual_layers"):  # compatible common_test_utils
+      self.num_encoder_residual_layers = hparams.num_residual_layers
+      self.num_decoder_residual_layers = hparams.num_residual_layers
+    else:
+      self.num_encoder_residual_layers = hparams.num_encoder_residual_layers
+      self.num_decoder_residual_layers = hparams.num_decoder_residual_layers
 
     # Initializer
     initializer = model_helper.get_initializer(
@@ -277,8 +290,6 @@ class BaseModel(object):
     """
     utils.print_out("# creating %s graph ..." % self.mode)
     dtype = tf.float32
-    num_layers = hparams.num_layers
-    num_gpus = hparams.num_gpus
 
     with tf.variable_scope(scope or "dynamic_seq2seq", dtype=dtype):
       # Encoder
@@ -290,7 +301,8 @@ class BaseModel(object):
 
       ## Loss
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
-        with tf.device(model_helper.get_device_str(num_layers - 1, num_gpus)):
+        with tf.device(model_helper.get_device_str(self.num_encoder_layers - 1,
+                                                   self.num_gpus)):
           loss = self._compute_loss(logits)
       else:
         loss = None
@@ -356,10 +368,6 @@ class BaseModel(object):
                          tf.int32)
     tgt_eos_id = tf.cast(self.tgt_vocab_table.lookup(tf.constant(hparams.eos)),
                          tf.int32)
-
-    num_layers = hparams.num_layers
-    num_gpus = hparams.num_gpus
-
     iterator = self.iterator
 
     # maximum_iteration: The maximum decoding steps.
@@ -407,9 +415,7 @@ class BaseModel(object):
         # We chose to apply the output_layer to all timesteps for speed:
         #   10% improvements for small models & 20% for larger ones.
         # If memory is a concern, we should apply output_layer per timestep.
-        device_id = num_layers if num_layers < num_gpus else (num_layers - 1)
-        with tf.device(model_helper.get_device_str(device_id, num_gpus)):
-          logits = self.output_layer(outputs.rnn_output)
+        logits = self.output_layer(outputs.rnn_output)
 
       ## Inference
       else:
@@ -536,9 +542,8 @@ class Model(BaseModel):
 
   def _build_encoder(self, hparams):
     """Build an encoder."""
-    num_layers = hparams.num_layers
-    num_residual_layers = hparams.num_residual_layers
-
+    num_layers = self.num_encoder_layers
+    num_residual_layers = self.num_encoder_residual_layers
     iterator = self.iterator
 
     source = iterator.source
@@ -641,17 +646,14 @@ class Model(BaseModel):
     if hparams.attention:
       raise ValueError("BasicModel doesn't support attention.")
 
-    num_layers = hparams.num_layers
-    num_residual_layers = hparams.num_residual_layers
-
     cell = model_helper.create_rnn_cell(
         unit_type=hparams.unit_type,
         num_units=hparams.num_units,
-        num_layers=num_layers,
-        num_residual_layers=num_residual_layers,
+        num_layers=self.num_decoder_layers,
+        num_residual_layers=self.num_decoder_residual_layers,
         forget_bias=hparams.forget_bias,
         dropout=hparams.dropout,
-        num_gpus=hparams.num_gpus,
+        num_gpus=self.num_gpus,
         mode=self.mode,
         single_cell_fn=self.single_cell_fn)
 

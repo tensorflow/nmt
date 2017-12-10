@@ -44,10 +44,15 @@ def add_arguments(parser):
   parser.add_argument("--num_units", type=int, default=32, help="Network size.")
   parser.add_argument("--num_layers", type=int, default=2,
                       help="Network depth.")
+  parser.add_argument("--num_encoder_layers", type=int, default=None,
+                      help="Encoder depth, equal to num_layers if None.")
+  parser.add_argument("--num_decoder_layers", type=int, default=None,
+                      help="Decoder depth, equal to num_layers if None.")
   parser.add_argument("--encoder_type", type=str, default="uni", help="""\
-      uni | bi | gnmt. For bi, we build num_layers/2 bi-directional layers.For
-      gnmt, we build 1 bi-directional layer, and (num_layers - 1) uni-
-      directional layers.\
+      uni | bi | gnmt.
+      For bi, we build num_encoder_layers/2 bi-directional layers.
+      For gnmt, we build 1 bi-directional layer, and (num_encoder_layers - 1)
+        uni-directional layers.\
       """)
   parser.add_argument("--residual", type="bool", nargs="?", const=True,
                       default=False,
@@ -282,7 +287,8 @@ def create_hparams(flags):
 
       # Networks
       num_units=flags.num_units,
-      num_layers=flags.num_layers,
+      num_encoder_layers=(flags.num_encoder_layers or flags.num_layers),
+      num_decoder_layers=(flags.num_decoder_layers or flags.num_layers),
       dropout=flags.dropout,
       unit_type=flags.unit_type,
       encoder_type=flags.encoder_type,
@@ -348,14 +354,44 @@ def create_hparams(flags):
 
 def extend_hparams(hparams):
   """Extend training hparams."""
+  assert hparams.num_encoder_layers and hparams.num_decoder_layers
+  if hparams.num_encoder_layers != hparams.num_decoder_layers:
+    hparams.pass_hidden_state = False
+    utils.print_out("Num encoder layer %d is different from num decoder layer"
+                    " %d, so set pass_hidden_state to False" % (
+                        hparams.num_encoder_layers,
+                        hparams.num_decoder_layers))
+
   # Sanity checks
-  if hparams.encoder_type == "bi" and hparams.num_layers % 2 != 0:
-    raise ValueError("For bi, num_layers %d should be even" %
-                     hparams.num_layers)
+  if hparams.encoder_type == "bi" and hparams.num_encoder_layers % 2 != 0:
+    raise ValueError("For bi, num_encoder_layers %d should be even" %
+                     hparams.num_encoder_layers)
   if (hparams.attention_architecture in ["gnmt"] and
-      hparams.num_layers < 2):
+      hparams.num_encoder_layers < 2):
     raise ValueError("For gnmt attention architecture, "
-                     "num_layers %d should be >= 2" % hparams.num_layers)
+                     "num_encoder_layers %d should be >= 2" %
+                     hparams.num_encoder_layers)
+
+  # Set residual layers
+  num_encoder_residual_layers = 0
+  num_decoder_residual_layers = 0
+  if hparams.residual:
+    if hparams.num_encoder_layers > 1:
+      num_encoder_residual_layers = hparams.num_encoder_layers - 1
+    if hparams.num_decoder_layers > 1:
+      num_decoder_residual_layers = hparams.num_decoder_layers - 1
+
+    if hparams.encoder_type == "gnmt":
+      # The first unidirectional layer (after the bi-directional layer) in
+      # the GNMT encoder can't have residual connection due to the input is
+      # the concatenation of fw_cell and bw_cell's outputs.
+      num_encoder_residual_layers = hparams.num_encoder_layers - 2
+
+      # Compatible for GNMT models
+      if hparams.num_encoder_layers == hparams.num_decoder_layers:
+        num_decoder_residual_layers = num_encoder_residual_layers
+  hparams.add_hparam("num_encoder_residual_layers", num_encoder_residual_layers)
+  hparams.add_hparam("num_decoder_residual_layers", num_decoder_residual_layers)
 
   if hparams.subword_option and hparams.subword_option not in ["spm", "bpe"]:
     raise ValueError("subword option must be either spm, or bpe")
@@ -368,19 +404,6 @@ def extend_hparams(hparams):
   utils.print_out("  dev_prefix=%s" % hparams.dev_prefix)
   utils.print_out("  test_prefix=%s" % hparams.test_prefix)
   utils.print_out("  out_dir=%s" % hparams.out_dir)
-
-  # Set num_residual_layers
-  if hparams.residual and hparams.num_layers > 1:
-    if hparams.encoder_type == "gnmt":
-      # The first unidirectional layer (after the bi-directional layer) in
-      # the GNMT encoder can't have residual connection due to the input is
-      # the concatenation of fw_cell and bw_cell's outputs.
-      num_residual_layers = hparams.num_layers - 2
-    else:
-      num_residual_layers = hparams.num_layers - 1
-  else:
-    num_residual_layers = 0
-  hparams.add_hparam("num_residual_layers", num_residual_layers)
 
   ## Vocab
   # Get vocab file names first
@@ -512,7 +535,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
 
   # Load hparams.
   hparams = create_or_load_hparams(
-      out_dir, default_hparams, flags.hparams_path, save_hparams=(jobid==0))
+      out_dir, default_hparams, flags.hparams_path, save_hparams=(jobid == 0))
 
   if flags.inference_input_file:
     # Inference indices

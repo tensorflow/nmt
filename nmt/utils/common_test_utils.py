@@ -46,10 +46,12 @@ def create_test_hparams(unit_type="lstm",
   return tf.contrib.training.HParams(
       # Networks
       num_units=5,
-      num_layers=num_layers,
+      num_encoder_layers=num_layers,
+      num_decoder_layers=num_layers,
       dropout=0.5,
       unit_type=unit_type,
       encoder_type=encoder_type,
+      residual=use_residual,
       num_residual_layers=num_residual_layers,
       time_major=True,
       num_embeddings_partitions=0,

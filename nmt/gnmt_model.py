@@ -62,10 +62,8 @@ class GNMTModel(attention_model.AttentionModel):
       raise ValueError("Unknown encoder_type %s" % hparams.encoder_type)
 
     # Build GNMT encoder.
-    num_layers = hparams.num_layers
-    num_residual_layers = hparams.num_residual_layers
     num_bi_layers = 1
-    num_uni_layers = num_layers - num_bi_layers
+    num_uni_layers = self.num_encoder_layers - num_bi_layers
     utils.print_out("  num_bi_layers = %d" % num_bi_layers)
     utils.print_out("  num_uni_layers = %d" % num_uni_layers)
 
@@ -96,10 +94,10 @@ class GNMTModel(attention_model.AttentionModel):
           unit_type=hparams.unit_type,
           num_units=hparams.num_units,
           num_layers=num_uni_layers,
-          num_residual_layers=num_residual_layers,
+          num_residual_layers=self.num_encoder_residual_layers,
           forget_bias=hparams.forget_bias,
           dropout=hparams.dropout,
-          num_gpus=hparams.num_gpus,
+          num_gpus=self.num_gpus,
           base_gpu=1,
           mode=self.mode,
           single_cell_fn=self.single_cell_fn)
@@ -126,8 +124,6 @@ class GNMTModel(attention_model.AttentionModel):
     attention_option = hparams.attention
     attention_architecture = hparams.attention_architecture
     num_units = hparams.num_units
-    num_layers = hparams.num_layers
-    num_residual_layers = hparams.num_residual_layers
     beam_width = hparams.beam_width
 
     dtype = tf.float32
@@ -154,11 +150,11 @@ class GNMTModel(attention_model.AttentionModel):
     cell_list = model_helper._cell_list(  # pylint: disable=protected-access
         unit_type=hparams.unit_type,
         num_units=num_units,
-        num_layers=num_layers,
-        num_residual_layers=num_residual_layers,
+        num_layers=self.num_decoder_layers,
+        num_residual_layers=self.num_decoder_residual_layers,
         forget_bias=hparams.forget_bias,
         dropout=hparams.dropout,
-        num_gpus=hparams.num_gpus,
+        num_gpus=self.num_gpus,
         mode=self.mode,
         single_cell_fn=self.single_cell_fn,
         residual_fn=gnmt_residual_fn
@@ -187,7 +183,6 @@ class GNMTModel(attention_model.AttentionModel):
     else:
       raise ValueError(
           "Unknown attention_architecture %s" % attention_architecture)
-
 
     if hparams.pass_hidden_state:
       decoder_initial_state = tuple(
