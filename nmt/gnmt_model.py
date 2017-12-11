@@ -121,6 +121,12 @@ class GNMTModel(attention_model.AttentionModel):
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
                           source_sequence_length):
     """Build a RNN cell with GNMT attention architecture."""
+    # Standard attention
+    if hparams.attention_architecture == "standard":
+      return super(GNMTModel, self)._build_decoder_cell(
+          hparams, encoder_outputs, encoder_state, source_sequence_length)
+
+    # GNMT attention
     attention_option = hparams.attention
     attention_architecture = hparams.attention_architecture
     num_units = hparams.num_units
@@ -196,6 +202,11 @@ class GNMTModel(attention_model.AttentionModel):
     return cell, decoder_initial_state
 
   def _get_infer_summary(self, hparams):
+    # Standard attention
+    if hparams.attention_architecture == "standard":
+      return super(GNMTModel, self)._get_infer_summary(hparams)
+
+    # GNMT attention
     if hparams.beam_width > 0:
       return tf.no_op()
     return attention_model._create_attention_images_summary(

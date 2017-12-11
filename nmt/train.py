@@ -212,12 +212,15 @@ def train(hparams, scope=None, target_session=""):
 
   if not hparams.attention:
     model_creator = nmt_model.Model
-  elif hparams.attention_architecture == "standard":
-    model_creator = attention_model.AttentionModel
-  elif hparams.attention_architecture in ["gnmt", "gnmt_v2"]:
-    model_creator = gnmt_model.GNMTModel
-  else:
-    raise ValueError("Unknown model architecture")
+  else:  # Attention
+    if (hparams.encoder_type == "gnmt" or
+        hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+      model_creator = gnmt_model.GNMTModel
+    elif hparams.attention_architecture == "standard":
+      model_creator = attention_model.AttentionModel
+    else:
+      raise ValueError("Unknown attention architecture %s" %
+                       hparams.attention_architecture)
 
   train_model = model_helper.create_train_model(model_creator, hparams, scope)
   eval_model = model_helper.create_eval_model(model_creator, hparams, scope)
