@@ -24,6 +24,9 @@ __all__ = [
     "compute_perplexity"
 ]
 
+# If a vocab size is greater than this value, put the embedding on cpu instead
+VOCAB_SIZE_THRESHOLD_CPU = 50000
+
 
 def get_initializer(init_op, seed=None, init_weight=None):
   """Create an initializer. init_weight is only for uniform."""
@@ -212,6 +215,14 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
       iterator=iterator)
 
 
+def _get_embed_device(vocab_size):
+  """Decide on which device to place an embed matrix given its vocab size."""
+  if vocab_size > VOCAB_SIZE_THRESHOLD_CPU:
+    return "/cpu:0"
+  else:
+    return "/gpu:0"
+
+
 def _create_pretrained_emb_from_txt(
     vocab_file, embed_file, num_trainable_tokens=3, dtype=tf.float32,
     scope=None):
@@ -225,12 +236,12 @@ def _create_pretrained_emb_from_txt(
   vocab, _ = vocab_utils.load_vocab(vocab_file)
   trainable_tokens = vocab[:num_trainable_tokens]
 
-  utils.print_out('# Using pretrained embedding: %s.' % embed_file)
-  utils.print_out('  with trainable tokens: ')
+  utils.print_out("# Using pretrained embedding: %s." % embed_file)
+  utils.print_out("  with trainable tokens: ")
 
   emb_dict, emb_size = vocab_utils.load_embed_txt(embed_file)
   for token in trainable_tokens:
-    utils.print_out('    %s' % token)
+    utils.print_out("    %s" % token)
     if token not in emb_dict:
       emb_dict[token] = [0.0] * emb_size
 
@@ -239,9 +250,22 @@ def _create_pretrained_emb_from_txt(
   emb_mat = tf.constant(emb_mat)
   emb_mat_const = tf.slice(emb_mat, [num_trainable_tokens, 0], [-1, -1])
   with tf.variable_scope(scope or "pretrain_embeddings", dtype=dtype) as scope:
-    emb_mat_var = tf.get_variable(
-        "emb_mat_var", [num_trainable_tokens, emb_size])
+    with tf.device(_get_embed_device(num_trainable_tokens)):
+      emb_mat_var = tf.get_variable(
+          "emb_mat_var", [num_trainable_tokens, emb_size])
   return tf.concat([emb_mat_var, emb_mat_const], 0)
+
+
+def _create_or_load_embed(embed_name, vocab_file, embed_file,
+                          vocab_size, embed_size, dtype):
+  """Create a new or load an existing embedding matrix."""
+  if vocab_file and embed_file:
+    embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
+  else:
+    with tf.device(_get_embed_device(vocab_size)):
+      embedding = tf.get_variable(
+          embed_name, [vocab_size, embed_size], dtype)
+  return embedding
 
 
 def create_emb_for_encoder_and_decoder(share_vocab,
@@ -291,7 +315,7 @@ def create_emb_for_encoder_and_decoder(share_vocab,
 
   if (src_embed_file or tgt_embed_file) and partitioner:
     raise ValueError(
-        "Cann't set num_partitions > 1 when using pretrained embedding")
+        "Can't set num_partitions > 1 when using pretrained embedding")
 
   with tf.variable_scope(
       scope or "embeddings", dtype=dtype, partitioner=partitioner) as scope:
@@ -300,34 +324,25 @@ def create_emb_for_encoder_and_decoder(share_vocab,
       if src_vocab_size != tgt_vocab_size:
         raise ValueError("Share embedding but different src/tgt vocab sizes"
                          " %d vs. %d" % (src_vocab_size, tgt_vocab_size))
-      utils.print_out("# Use the same source embeddings for target")
+      assert src_embed_size == tgt_embed_size
+      utils.print_out("# Use the same embedding for source and target")
       vocab_file = src_vocab_file or tgt_vocab_file
       embed_file = src_embed_file or tgt_embed_file
 
-      if vocab_file and embed_file:
-        assert src_embed_size == tgt_embed_size
-        embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
-      else:
-        embedding = tf.get_variable(
-            "embedding_share", [src_vocab_size, src_embed_size], dtype)
-      embedding_encoder = embedding
-      embedding_decoder = embedding
+      embedding_encoder = _create_or_load_embed(
+          "embedding_share", vocab_file, embed_file,
+          src_vocab_size, src_embed_size, dtype)
+      embedding_decoder = embedding_encoder
     else:
       with tf.variable_scope("encoder", partitioner=partitioner):
-        if src_vocab_file and src_embed_file:
-          embedding_encoder = _create_pretrained_emb_from_txt(
-              src_vocab_file, src_embed_file)
-        else:
-          embedding_encoder = tf.get_variable(
-              "embedding_encoder", [src_vocab_size, src_embed_size], dtype)
+        embedding_encoder = _create_or_load_embed(
+            "embedding_encoder", src_vocab_file, src_embed_file,
+            src_vocab_size, src_embed_size, dtype)
 
       with tf.variable_scope("decoder", partitioner=partitioner):
-        if tgt_vocab_file and tgt_embed_file:
-          embedding_decoder = _create_pretrained_emb_from_txt(
-              tgt_vocab_file, tgt_embed_file)
-        else:
-          embedding_decoder = tf.get_variable(
-              "embedding_decoder", [tgt_vocab_size, tgt_embed_size], dtype)
+        embedding_decoder = _create_or_load_embed(
+            "embedding_decoder", tgt_vocab_file, tgt_embed_file,
+            tgt_vocab_size, tgt_embed_size, dtype)
 
   return embedding_encoder, embedding_decoder
 
