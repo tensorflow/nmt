@@ -60,6 +60,22 @@ class NMTTest(tf.test.TestCase):
     train_fn = train.train
     nmt.run_main(FLAGS, default_hparams, train_fn, None)
 
+
+  def testTrainWithAvgCkpts(self):
+    """Test the training loop is functional with basic hparams."""
+    nmt_parser = argparse.ArgumentParser()
+    nmt.add_arguments(nmt_parser)
+    FLAGS, unparsed = nmt_parser.parse_known_args()
+
+    _update_flags(FLAGS, "nmt_train_test_avg_ckpts")
+    FLAGS.avg_ckpts = True
+
+    default_hparams = nmt.create_hparams(FLAGS)
+
+    train_fn = train.train
+    nmt.run_main(FLAGS, default_hparams, train_fn, None)
+
+
   def testInference(self):
     """Test inference is function with basic hparams."""
     nmt_parser = argparse.ArgumentParser()

@@ -231,6 +231,13 @@ def add_arguments(parser):
   parser.add_argument("--override_loaded_hparams", type="bool", nargs="?",
                       const=True, default=False,
                       help="Override loaded hparams with values specified")
+  parser.add_argument("--num_keep_ckpts", type=int, default=5,
+                      help="Max number of checkpoints to keep.")
+  parser.add_argument("--avg_ckpts", type="bool", nargs="?",
+                      const=True, default=False, help=("""\
+                      Average the last N checkpoints for external evaluation.
+                      N can be controlled by setting --num_keep_ckpts.\
+                      """))
 
   # Inference
   parser.add_argument("--ckpt", type=str, default="",
@@ -346,7 +353,8 @@ def create_hparams(flags):
       log_device_placement=flags.log_device_placement,
       random_seed=flags.random_seed,
       override_loaded_hparams=flags.override_loaded_hparams,
-      num_keep_ckpts=5,  # saves 5 checkpoints by default.
+      num_keep_ckpts=flags.num_keep_ckpts,
+      avg_ckpts=flags.avg_ckpts,
       num_intra_threads=flags.num_intra_threads,
       num_inter_threads=flags.num_inter_threads,
   )
@@ -464,6 +472,12 @@ def extend_hparams(hparams):
     best_metric_dir = os.path.join(hparams.out_dir, "best_" + metric)
     hparams.add_hparam("best_" + metric + "_dir", best_metric_dir)
     tf.gfile.MakeDirs(best_metric_dir)
+
+    if hparams.avg_ckpts:
+      hparams.add_hparam("avg_best_" + metric, 0)  # larger is better
+      best_metric_dir = os.path.join(hparams.out_dir, "avg_best_" + metric)
+      hparams.add_hparam("avg_best_" + metric + "_dir", best_metric_dir)
+      tf.gfile.MakeDirs(best_metric_dir)
 
   return hparams
 
