@@ -112,6 +112,8 @@ def add_arguments(parser):
       How we decay learning rate. Options include:
         luong234: after 2/3 num train steps, we start halving the learning rate
           for 4 times before finishing.
+        luong5: after 1/2 num train steps, we start halving the learning rate
+          for 5 times before finishing.\
         luong10: after 1/2 num train steps, we start halving the learning rate
           for 10 times before finishing.\
       """)
