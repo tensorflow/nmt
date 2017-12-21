@@ -251,6 +251,7 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
   """Misc tasks to do before training."""
   stats = init_stats()
   info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
+          "avg_grad_norm": 0.0,
           "learning_rate": loaded_train_model.learning_rate.eval(
               session=train_sess)}
   start_train_time = time.time()
