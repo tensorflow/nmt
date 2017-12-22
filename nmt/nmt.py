@@ -296,6 +296,7 @@ def create_hparams(flags):
 
       # Networks
       num_units=flags.num_units,
+      num_layers=flags.num_layers,  # Compatible
       num_encoder_layers=(flags.num_encoder_layers or flags.num_layers),
       num_decoder_layers=(flags.num_decoder_layers or flags.num_layers),
       dropout=flags.dropout,
