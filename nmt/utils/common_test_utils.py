@@ -24,6 +24,7 @@ import tensorflow as tf
 from tensorflow.python.ops import lookup_ops
 
 from ..utils import iterator_utils
+from ..utils import standard_hparams_utils
 
 
 def create_test_hparams(unit_type="lstm",
@@ -43,76 +44,54 @@ def create_test_hparams(unit_type="lstm",
     # `model_utils.py`, so we can also test it here.
     num_residual_layers = 2
 
-  return tf.contrib.training.HParams(
-      # Networks
-      num_units=5,
-      num_encoder_layers=num_layers,
-      num_decoder_layers=num_layers,
-      dropout=0.5,
-      unit_type=unit_type,
-      encoder_type=encoder_type,
-      residual=use_residual,
-      num_residual_layers=num_residual_layers,
-      time_major=True,
-      num_embeddings_partitions=0,
+  standard_hparams = standard_hparams_utils.create_standard_hparams()
 
-      # Attention mechanisms
-      attention=attention,
-      attention_architecture=attention_architecture,
-      output_attention=True,
-      pass_hidden_state=True,
+  # Networks
+  standard_hparams.num_units  =  5
+  standard_hparams.num_encoder_layers = num_layers
+  standard_hparams.num_decoder_layers = num_layers
+  standard_hparams.dropout = 0.5
+  standard_hparams.unit_type = unit_type
+  standard_hparams.encoder_type = encoder_type
+  standard_hparams.residual = use_residual
+  standard_hparams.num_residual_layers = num_residual_layers
 
-      # Train
-      optimizer="sgd",
-      init_op=init_op,
-      init_weight=0.1,
-      max_gradient_norm=5.0,
-      max_emb_gradient_norm=None,
-      learning_rate=1.0,
-      warmup_steps=0,
-      warmup_scheme="t2t",
-      num_train_steps=1,
-      decay_scheme="",
-      colocate_gradients_with_ops=True,
-      batch_size=128,
-      num_buckets=5,
+  # Attention mechanisms
+  standard_hparams.attention = attention
+  standard_hparams.attention_architecture = attention_architecture
 
-      # Infer
-      tgt_max_len_infer=100,
-      infer_batch_size=32,
-      beam_width=beam_width,
-      length_penalty_weight=0.0,
-      num_translations_per_input=num_translations_per_input,
+  # Train
+  standard_hparams.init_op = init_op
+  standard_hparams.num_train_steps = 1
+  standard_hparams.decay_scheme = ""
 
-      # Misc
-      forget_bias=0.0,
-      num_gpus=1,
-      share_vocab=False,
-      random_seed=3,
-      num_keep_ckpts=5,
+  # Infer
+  standard_hparams.tgt_max_len_infer = 100
+  standard_hparams.beam_width = beam_width
+  standard_hparams.num_translations_per_input = num_translations_per_input
 
-      # Vocab
-      src_vocab_size=5,
-      tgt_vocab_size=5,
-      eos="eos",
-      sos="sos",
-      src_vocab_file="",
-      tgt_vocab_file="",
-      src_embed_file="",
-      tgt_embed_file="",
+  # Misc
+  standard_hparams.forget_bias = 0.0
+  standard_hparams.random_seed = 3
 
-      # For inference.py test
-      subword_option="bpe",
-      src="src",
-      tgt="tgt",
-      src_max_len=400,
-      tgt_eos_id=0,
-      # TODO(rzhao): Remove this after adding in-graph id to string lookup.
-      tgt_vocab=["eos", "test1", "test2", "test3", "test4", "test5"],
-      src_max_len_infer=None,
-      inference_indices=inference_indices,
-      metrics=["bleu"],
-  )
+  # Vocab
+  standard_hparams.src_vocab_size = 5
+  standard_hparams.tgt_vocab_size = 5
+  standard_hparams.eos = "eos"
+  standard_hparams.sos = "sos"
+  standard_hparams.src_vocab_file = ""
+  standard_hparams.tgt_vocab_file = ""
+  standard_hparams.src_embed_file = ""
+  standard_hparams.tgt_embed_file = ""
+
+  # For inference.py test
+  standard_hparams.subword_option = "bpe"
+  standard_hparams.src = "src"
+  standard_hparams.tgt = "tgt"
+  standard_hparams.src_max_len = 400
+  standard_hparams.tgt_eos_id = 0
+  standard_hparams.inference_indices = inference_indices
+  return standard_hparams
 
 
 def create_test_iterator(hparams, mode):

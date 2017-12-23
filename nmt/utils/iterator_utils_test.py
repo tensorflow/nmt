@@ -29,6 +29,7 @@ from ..utils import iterator_utils
 class IteratorUtilsTest(tf.test.TestCase):
 
   def testGetIterator(self):
+    tf.set_random_seed(1)
     tgt_vocab_table = src_vocab_table = lookup_ops.index_table_from_tensor(
         tf.constant(["a", "b", "c", "eos", "sos"]))
     src_dataset = tf.data.Dataset.from_tensor_slices(
@@ -52,7 +53,8 @@ class IteratorUtilsTest(tf.test.TestCase):
         eos=hparams.eos,
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
-        src_max_len=src_max_len)
+        src_max_len=src_max_len,
+        reshuffle_each_iteration=False)
     table_initializer = tf.tables_initializer()
     source = iterator.source
     target_input = iterator.target_input
@@ -105,6 +107,7 @@ class IteratorUtilsTest(tf.test.TestCase):
         sess.run(source)
 
   def testGetIteratorWithShard(self):
+    tf.set_random_seed(1)
     tgt_vocab_table = src_vocab_table = lookup_ops.index_table_from_tensor(
         tf.constant(["a", "b", "c", "eos", "sos"]))
     src_dataset = tf.data.Dataset.from_tensor_slices(
@@ -130,7 +133,8 @@ class IteratorUtilsTest(tf.test.TestCase):
         num_buckets=hparams.num_buckets,
         src_max_len=src_max_len,
         num_shards=2,
-        shard_index=1)
+        shard_index=1,
+        reshuffle_each_iteration=False)
     table_initializer = tf.tables_initializer()
     source = iterator.source
     target_input = iterator.target_input
@@ -168,6 +172,7 @@ class IteratorUtilsTest(tf.test.TestCase):
         sess.run(source)
 
   def testGetIteratorWithSkipCount(self):
+    tf.set_random_seed(1)
     tgt_vocab_table = src_vocab_table = lookup_ops.index_table_from_tensor(
         tf.constant(["a", "b", "c", "eos", "sos"]))
     src_dataset = tf.data.Dataset.from_tensor_slices(
@@ -193,7 +198,8 @@ class IteratorUtilsTest(tf.test.TestCase):
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=src_max_len,
-        skip_count=skip_count)
+        skip_count=skip_count,
+        reshuffle_each_iteration=False)
     table_initializer = tf.tables_initializer()
     source = iterator.source
     target_input = iterator.target_input

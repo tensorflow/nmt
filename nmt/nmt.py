@@ -264,6 +264,12 @@ def add_arguments(parser):
       """))
   parser.add_argument("--length_penalty_weight", type=float, default=0.0,
                       help="Length penalty for beam search.")
+  parser.add_argument("--sampling_temperature", type=float,
+                      default=0.0,
+                      help=("""\
+      Softmax sampling temperature for inference decoding, 0.0 means greedy
+      decoding. This option is ignored when using beam search.\
+      """))
   parser.add_argument("--num_translations_per_input", type=int, default=1,
                       help=("""\
       Number of translations generated for each sentence. This is only used for
@@ -337,6 +343,7 @@ def create_hparams(flags):
       infer_batch_size=flags.infer_batch_size,
       beam_width=flags.beam_width,
       length_penalty_weight=flags.length_penalty_weight,
+      sampling_temperature=flags.sampling_temperature,
       num_translations_per_input=flags.num_translations_per_input,
 
       # Vocab

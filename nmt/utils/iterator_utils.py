@@ -90,7 +90,8 @@ def get_iterator(src_dataset,
                  output_buffer_size=None,
                  skip_count=None,
                  num_shards=1,
-                 shard_index=0):
+                 shard_index=0,
+                 reshuffle_each_iteration=True):
   if not output_buffer_size:
     output_buffer_size = batch_size * 1000
   src_eos_id = tf.cast(src_vocab_table.lookup(tf.constant(eos)), tf.int32)
@@ -103,7 +104,8 @@ def get_iterator(src_dataset,
   if skip_count is not None:
     src_tgt_dataset = src_tgt_dataset.skip(skip_count)
 
-  src_tgt_dataset = src_tgt_dataset.shuffle(output_buffer_size, random_seed)
+  src_tgt_dataset = src_tgt_dataset.shuffle(
+      output_buffer_size, random_seed, reshuffle_each_iteration)
 
   src_tgt_dataset = src_tgt_dataset.map(
       lambda src, tgt: (

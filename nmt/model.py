@@ -439,8 +439,15 @@ class BaseModel(object):
               length_penalty_weight=length_penalty_weight)
         else:
           # Helper
-          helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
-              self.embedding_decoder, start_tokens, end_token)
+          sampling_temperature = hparams.sampling_temperature
+          if sampling_temperature > 0.0:
+            helper = tf.contrib.seq2seq.SampleEmbeddingHelper(
+                self.embedding_decoder, start_tokens, end_token,
+                softmax_temperature=sampling_temperature,
+                seed=hparams.random_seed)
+          else:
+            helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
+                self.embedding_decoder, start_tokens, end_token)
 
           # Decoder
           my_decoder = tf.contrib.seq2seq.BasicDecoder(

@@ -69,7 +69,7 @@ class InferenceTest(tf.test.TestCase):
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
     ckpt = self._createTestInferCheckpoint(hparams, out_dir)
@@ -93,7 +93,7 @@ class InferenceTest(tf.test.TestCase):
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "multi_basic_infer")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
     ckpt = self._createTestInferCheckpoint(hparams, out_dir)
@@ -114,7 +114,7 @@ class InferenceTest(tf.test.TestCase):
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "attention_infer")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
     ckpt = self._createTestInferCheckpoint(hparams, out_dir)
@@ -135,7 +135,7 @@ class InferenceTest(tf.test.TestCase):
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "multi_worker_infer")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
 
@@ -175,7 +175,7 @@ class InferenceTest(tf.test.TestCase):
 
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer_with_indices")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
     ckpt = self._createTestInferCheckpoint(hparams, out_dir)
@@ -200,7 +200,7 @@ class InferenceTest(tf.test.TestCase):
     infer_file = "nmt/testdata/test_infer_file"
     out_dir = os.path.join(tf.test.get_temp_dir(),
                            "attention_infer_with_indices")
-    hparams.add_hparam("out_dir", out_dir)
+    hparams.out_dir = out_dir
     os.makedirs(out_dir)
     output_infer = os.path.join(out_dir, "output_infer")
     ckpt = self._createTestInferCheckpoint(hparams, out_dir)
