@@ -341,8 +341,8 @@ def create_hparams(flags):
       random_seed=flags.random_seed,
       override_loaded_hparams=flags.override_loaded_hparams,
       num_keep_ckpts=5,  # saves 5 checkpoints by default.
-      num_intra_threads=FLAGS.num_intra_threads,
-      num_inter_threads=FLAGS.num_inter_threads,
+      num_intra_threads=flags.num_intra_threads,
+      num_inter_threads=flags.num_inter_threads,
   )
 
 
