@@ -99,11 +99,4 @@ def get_translation(nmt_outputs, sent_id, tgt_eos, subword_option):
   if tgt_eos and tgt_eos in output:
     output = output[:output.index(tgt_eos)]
 
-  if subword_option == "bpe":  # BPE
-    translation = utils.format_bpe_text(output)
-  elif subword_option == "spm":  # SPM
-    translation = utils.format_spm_text(output)
-  else:
-    translation = utils.format_text(output)
-
-  return translation
+  return utils.format_sentence(output, subword_option)
