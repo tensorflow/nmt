@@ -195,6 +195,13 @@ treated as unique.  All other words are converted to an "unknown" token and all
 get the same embedding.  The embedding weights, one set per language, are
 usually learned during training.
 
+
+<p align="center">
+<img src="nmt/g3doc/img/source_embedding.png" />
+<br>
+Figure 3. <b>Source language embedding</b> – example of a source-language vocabulary and embedding. In practice, the vocabulary would include thousands or even millions of words. The target language would similarly have its own embedding table.
+</p>
+
 ``` python
 # Embedding
 embedding_encoder = variable_scope.get_variable(
@@ -205,6 +212,13 @@ embedding_encoder = variable_scope.get_variable(
 encoder_emb_inp = embedding_ops.embedding_lookup(
     embedding_encoder, encoder_inputs)
 ```
+
+
+<p align="center">
+<img src="nmt/g3doc/img/encoder_emb_inp.png" />
+<br>
+Figure 4. <b>Embedded encoder input</b> – example of how the phrase 'I am a student' is prepared to be fed into the encoder. The variable `encoder_emb_inp` now holds the embedded representation of the phrase.
+</p>
 
 Similarly, we can build *embedding_decoder* and *decoder_emb_inp*. Note that one
 can choose to initialize embedding weights with pretrained word representations
@@ -411,7 +425,7 @@ i.e., *encoder_inputs*. There are many ways to perform decoding.  Decoding
 methods include greedy, sampling, and beam-search decoding. Here, we will
 discuss the greedy decoding strategy.
 
-The idea is simple and we illustrate it in Figure 3:
+The idea is simple and we illustrate it in Figure 5:
 
 1. We still encode the source sentence in the same way as during training to
    obtain an *encoder_state*, and this *encoder_state* is used to initialize the
@@ -421,7 +435,7 @@ The idea is simple and we illustrate it in Figure 3:
 3. For each timestep on the decoder side, we treat the RNN's output as a set of
    logits.  We choose the most likely word, the id associated with the maximum
    logit value, as the emitted word (this is the "greedy" behavior).  For
-   example in Figure 3, the word "moi" has the highest translation probability
+   example in Figure 5, the word "moi" has the highest translation probability
    in the first decoding step.  We then feed this word as input to the next
    timestep.
 4. The process continues until the end-of-sentence marker "\</s\>" is produced as
@@ -430,7 +444,7 @@ The idea is simple and we illustrate it in Figure 3:
 <p align="center">
 <img width="40%" src="nmt/g3doc/img/greedy_dec.jpg" />
 <br>
-Figure 3. <b>Greedy decoding</b> – example of how a trained NMT model produces a
+Figure 5. <b>Greedy decoding</b> – example of how a trained NMT model produces a
 translation for a source sentence "Je suis étudiant" using greedy search.
 </p>
 
@@ -494,12 +508,12 @@ idea of the attention mechanism is to establish direct short-cut connections
 between the target and the source by paying "attention" to relevant source
 content as we translate. A nice byproduct of the attention mechanism is an
 easy-to-visualize alignment matrix between the source and target sentences (as
-shown in Figure 4).
+shown in Figure 6).
 
 <p align="center">
 <img width="40%" src="nmt/g3doc/img/attention_vis.jpg" />
 <br>
-Figure 4. <b>Attention visualization</b> – example of the alignments between source
+Figure 6. <b>Attention visualization</b> – example of the alignments between source
 and target sentences. Image is taken from (Bahdanau et al., 2015).
 </p>
 
@@ -526,17 +540,17 @@ of the attention mechanism.
 <p align="center">
 <img width="48%" src="nmt/g3doc/img/attention_mechanism.jpg" />
 <br>
-Figure 5. <b>Attention mechanism</b> – example of an attention-based NMT system
+Figure 7. <b>Attention mechanism</b> – example of an attention-based NMT system
 as described in (Luong et al., 2015) . We highlight in detail the first step of
 the attention computation. For clarity, we don't show the embedding and
 projection layers in Figure (2).
 </p>
 
-As illustrated in Figure 5, the attention computation happens at every decoder
+As illustrated in Figure 7, the attention computation happens at every decoder
 time step.  It consists of the following stages:
 
 1. The current target hidden state is compared with all source states to derive
-   *attention weights* (can be visualized as in Figure 4).
+   *attention weights* (can be visualized as in Figure 6).
 1. Based on the attention weights we compute a *context vector* as the weighted
    average of the source states.
 1. Combine the context vector with the current target hidden state to yield the
