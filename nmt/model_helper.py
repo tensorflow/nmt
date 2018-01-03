@@ -2,19 +2,16 @@
 from __future__ import print_function
 
 import collections
-import six
 import os
 import time
-
 import numpy as np
+import six
 import tensorflow as tf
 
 from tensorflow.python.ops import lookup_ops
-
 from .utils import iterator_utils
 from .utils import misc_utils as utils
 from .utils import vocab_utils
-
 
 __all__ = [
     "get_initializer", "get_device_str", "create_train_model",
@@ -136,6 +133,9 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
   with graph.as_default(), tf.container(scope or "eval"):
     src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
         src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
+        tgt_vocab_file, default_value=vocab_utils.UNK)
+
     src_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     tgt_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     src_dataset = tf.data.TextLineDataset(src_file_placeholder)
@@ -158,6 +158,7 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
         mode=tf.contrib.learn.ModeKeys.EVAL,
         source_vocab_table=src_vocab_table,
         target_vocab_table=tgt_vocab_table,
+        reverse_target_vocab_table=reverse_tgt_vocab_table,
         scope=scope,
         extra_args=extra_args)
   return EvalModel(
@@ -594,9 +595,9 @@ def compute_perplexity(model, sess, name):
 
   while True:
     try:
-      loss, predict_count, batch_size = model.eval(sess)
-      total_loss += loss * batch_size
-      total_predict_count += predict_count
+      output_tuple = model.eval(sess)
+      total_loss += output_tuple.eval_loss * output_tuple.batch_size
+      total_predict_count += output_tuple.predict_count
     except tf.errors.OutOfRangeError:
       break
 

@@ -250,8 +250,8 @@ class ModelTest(tf.test.TestCase):
 
   def _assertTrainStepsLoss(self, m, sess, name, num_steps=1):
     for _ in range(num_steps):
-      _, loss, _, _, _, _, _, _, _ = m.train(sess)
-
+      _, output_tuple = m.train(sess)
+    loss = output_tuple.train_loss
     print('{} {}-th step loss is: '.format(name, num_steps), loss)
     expected_loss = self.expected_train_values[name + '/loss']
     self.actual_train_values[name + '/loss'] = loss
@@ -259,8 +259,9 @@ class ModelTest(tf.test.TestCase):
     self.assertAllClose(expected_loss, loss)
 
   def _assertEvalLossAndPredictCount(self, m, sess, name):
-    loss, predict_count, _ = m.eval(sess)
-
+    output_tuple = m.eval(sess)
+    loss = output_tuple.eval_loss
+    predict_count = output_tuple.predict_count
     print('{} eval loss is: '.format(name), loss)
     print('{} predict count is: '.format(name), predict_count)
     expected_loss = self.expected_eval_values[name + '/loss']
@@ -272,8 +273,8 @@ class ModelTest(tf.test.TestCase):
     self.assertAllClose(expected_predict_count, predict_count)
 
   def _assertInferLogits(self, m, sess, name):
-    results = m.infer(sess)
-    logits_sum = np.sum(results[0])
+    output_tuple = m.infer(sess)
+    logits_sum = np.sum(output_tuple.infer_logits)
 
     print('{} infer logits sum is: '.format(name), logits_sum)
     expected_logits_sum = self.expected_infer_values[name + '/logits_sum']

@@ -19,7 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import abc
-
+import collections
 import tensorflow as tf
 
 from tensorflow.python.layers import core as layers_core
@@ -31,6 +31,27 @@ from .utils import misc_utils as utils
 utils.check_tensorflow_version()
 
 __all__ = ["BaseModel", "Model"]
+
+
+class TrainOutputTuple(collections.namedtuple(
+    "TrainOutputTuple", ("train_summary", "train_loss", "predict_count",
+                         "global_step", "word_count", "batch_size", "grad_norm",
+                         "learning_rate"))):
+  """To allow for flexibily in returing different outputs."""
+  pass
+
+
+class EvalOutputTuple(collections.namedtuple(
+    "EvalOutputTuple", ("eval_loss", "predict_count", "batch_size"))):
+  """To allow for flexibily in returing different outputs."""
+  pass
+
+
+class InferOutputTuple(collections.namedtuple(
+    "InferOutputTuple", ("infer_logits", "infer_summary", "sample_id",
+                         "sample_words"))):
+  """To allow for flexibily in returing different outputs."""
+  pass
 
 
 class BaseModel(object):
@@ -60,6 +81,93 @@ class BaseModel(object):
       extra_args: model_helper.ExtraArgs, for passing customizable functions.
 
     """
+    # Set params
+    self._set_params_initializer(hparams, mode, iterator,
+                                 source_vocab_table, target_vocab_table,
+                                 scope, extra_args)
+
+    # Projection
+    with tf.variable_scope(scope or "build_network"):
+      with tf.variable_scope("decoder/output_projection"):
+        self.output_layer = layers_core.Dense(
+            hparams.tgt_vocab_size, use_bias=False, name="output_projection")
+
+    ## Train graph
+    res = self.build_graph(hparams, scope=scope)
+    if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
+      self.train_loss = res[1]
+      self.word_count = tf.reduce_sum(
+          self.iterator.source_sequence_length) + tf.reduce_sum(
+              self.iterator.target_sequence_length)
+    elif self.mode == tf.contrib.learn.ModeKeys.EVAL:
+      self.eval_loss = res[1]
+    elif self.mode == tf.contrib.learn.ModeKeys.INFER:
+      self.infer_logits, _, self.final_context_state, self.sample_id = res
+      self.sample_words = reverse_target_vocab_table.lookup(
+          tf.to_int64(self.sample_id))
+
+    if self.mode != tf.contrib.learn.ModeKeys.INFER:
+      ## Count the number of predicted words for compute ppl.
+      self.predict_count = tf.reduce_sum(
+          self.iterator.target_sequence_length)
+
+    params = tf.trainable_variables()
+
+    # Gradients and SGD update operation for training the model.
+    # Arrage for the embedding vars to appear at the beginning.
+    if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
+      self.learning_rate = tf.constant(hparams.learning_rate)
+      # warm-up
+      self.learning_rate = self._get_learning_rate_warmup(hparams)
+      # decay
+      self.learning_rate = self._get_learning_rate_decay(hparams)
+
+      # Optimizer
+      if hparams.optimizer == "sgd":
+        opt = tf.train.GradientDescentOptimizer(self.learning_rate)
+      elif hparams.optimizer == "adam":
+        opt = tf.train.AdamOptimizer(self.learning_rate)
+      else:
+        raise ValueError("Unknown optimizer type %s" % hparams.optimizer)
+
+      # Gradients
+      gradients = tf.gradients(
+          self.train_loss,
+          params,
+          colocate_gradients_with_ops=hparams.colocate_gradients_with_ops)
+
+      clipped_grads, grad_norm_summary, grad_norm = model_helper.gradient_clip(
+          gradients, max_gradient_norm=hparams.max_gradient_norm)
+      self.grad_norm_summary = grad_norm_summary
+      self.grad_norm = grad_norm
+
+      self.update = opt.apply_gradients(
+          zip(clipped_grads, params), global_step=self.global_step)
+
+      # Summary
+      self.train_summary = self._get_train_summary()
+    elif self.mode == tf.contrib.learn.ModeKeys.INFER:
+      self.infer_summary = self._get_infer_summary(hparams)
+
+    # Saver
+    self.saver = tf.train.Saver(
+        tf.global_variables(), max_to_keep=hparams.num_keep_ckpts)
+
+    # Print trainable variables
+    utils.print_out("# Trainable variables")
+    for param in params:
+      utils.print_out("  %s, %s, %s" % (param.name, str(param.get_shape()),
+                                        param.op.device))
+
+  def _set_params_initializer(self,
+                              hparams,
+                              mode,
+                              iterator,
+                              source_vocab_table,
+                              target_vocab_table,
+                              scope,
+                              extra_args=None):
+    """Set various params for self and initialize."""
     assert isinstance(iterator, iterator_utils.BatchedInput)
     self.iterator = iterator
     self.mode = mode
@@ -90,6 +198,12 @@ class BaseModel(object):
       self.num_encoder_residual_layers = hparams.num_encoder_residual_layers
       self.num_decoder_residual_layers = hparams.num_decoder_residual_layers
 
+    # Batch size
+    self.batch_size = tf.size(self.iterator.source_sequence_length)
+
+    # Global step
+    self.global_step = tf.Variable(0, trainable=False)
+
     # Initializer
     initializer = model_helper.get_initializer(
         hparams.init_op, hparams.random_seed, hparams.init_weight)
@@ -97,84 +211,7 @@ class BaseModel(object):
 
     # Embeddings
     self.init_embeddings(hparams, scope)
-    self.batch_size = tf.size(self.iterator.source_sequence_length)
 
-    # Projection
-    with tf.variable_scope(scope or "build_network"):
-      with tf.variable_scope("decoder/output_projection"):
-        self.output_layer = layers_core.Dense(
-            hparams.tgt_vocab_size, use_bias=False, name="output_projection")
-
-    ## Train graph
-    res = self.build_graph(hparams, scope=scope)
-
-    if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
-      self.train_loss = res[1]
-      self.word_count = tf.reduce_sum(
-          self.iterator.source_sequence_length) + tf.reduce_sum(
-              self.iterator.target_sequence_length)
-    elif self.mode == tf.contrib.learn.ModeKeys.EVAL:
-      self.eval_loss = res[1]
-    elif self.mode == tf.contrib.learn.ModeKeys.INFER:
-      self.infer_logits, _, self.final_context_state, self.sample_id = res
-      self.sample_words = reverse_target_vocab_table.lookup(
-          tf.to_int64(self.sample_id))
-
-    if self.mode != tf.contrib.learn.ModeKeys.INFER:
-      ## Count the number of predicted words for compute ppl.
-      self.predict_count = tf.reduce_sum(
-          self.iterator.target_sequence_length)
-
-    self.global_step = tf.Variable(0, trainable=False)
-    params = tf.trainable_variables()
-
-    # Gradients and SGD update operation for training the model.
-    # Arrage for the embedding vars to appear at the beginning.
-    if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
-      self.learning_rate = tf.constant(hparams.learning_rate)
-      # warm-up
-      self.learning_rate = self._get_learning_rate_warmup(hparams)
-      # decay
-      self.learning_rate = self._get_learning_rate_decay(hparams)
-
-      # Optimizer
-      if hparams.optimizer == "sgd":
-        opt = tf.train.GradientDescentOptimizer(self.learning_rate)
-        tf.summary.scalar("lr", self.learning_rate)
-      elif hparams.optimizer == "adam":
-        opt = tf.train.AdamOptimizer(self.learning_rate)
-
-      # Gradients
-      gradients = tf.gradients(
-          self.train_loss,
-          params,
-          colocate_gradients_with_ops=hparams.colocate_gradients_with_ops)
-
-      clipped_grads, grad_norm_summary, grad_norm = model_helper.gradient_clip(
-          gradients, max_gradient_norm=hparams.max_gradient_norm)
-      self.grad_norm = grad_norm
-
-      self.update = opt.apply_gradients(
-          zip(clipped_grads, params), global_step=self.global_step)
-
-      # Summary
-      self.train_summary = tf.summary.merge([
-          tf.summary.scalar("lr", self.learning_rate),
-          tf.summary.scalar("train_loss", self.train_loss),
-      ] + grad_norm_summary)
-
-    if self.mode == tf.contrib.learn.ModeKeys.INFER:
-      self.infer_summary = self._get_infer_summary(hparams)
-
-    # Saver
-    self.saver = tf.train.Saver(
-        tf.global_variables(), max_to_keep=hparams.num_keep_ckpts)
-
-    # Print trainable variables
-    utils.print_out("# Trainable variables")
-    for param in params:
-      utils.print_out("  %s, %s, %s" % (param.name, str(param.get_shape()),
-                                        param.op.device))
 
   def _get_learning_rate_warmup(self, hparams):
     """Get learning rate warmup."""
@@ -201,8 +238,8 @@ class BaseModel(object):
         lambda: self.learning_rate,
         name="learning_rate_warump_cond")
 
-  def _get_learning_rate_decay(self, hparams):
-    """Get learning rate decay."""
+  def _get_decay_info(self, hparams):
+    """Return decay info based on decay_scheme."""
     if hparams.decay_scheme in ["luong5", "luong10", "luong234"]:
       decay_factor = 0.5
       if hparams.decay_scheme == "luong5":
@@ -222,6 +259,11 @@ class BaseModel(object):
       decay_factor = 1.0
     elif hparams.decay_scheme:
       raise ValueError("Unknown decay scheme %s" % hparams.decay_scheme)
+    return start_decay_step, decay_steps, decay_factor
+
+  def _get_learning_rate_decay(self, hparams):
+    """Get learning rate decay."""
+    start_decay_step, decay_steps, decay_factor = self._get_decay_info(hparams)
     utils.print_out("  decay_scheme=%s, start_decay_step=%d, decay_steps %d, "
                     "decay_factor %g" % (hparams.decay_scheme,
                                          start_decay_step,
@@ -253,23 +295,34 @@ class BaseModel(object):
             tgt_embed_file=hparams.tgt_embed_file,
             scope=scope,))
 
+  def _get_train_summary(self):
+    """Get train summary."""
+    train_summary = tf.summary.merge(
+        [tf.summary.scalar("lr", self.learning_rate),
+         tf.summary.scalar("train_loss", self.train_loss)] +
+        self.grad_norm_summary)
+    return train_summary
+
   def train(self, sess):
+    """Execute train graph."""
     assert self.mode == tf.contrib.learn.ModeKeys.TRAIN
-    return sess.run([self.update,
-                     self.train_loss,
-                     self.predict_count,
-                     self.train_summary,
-                     self.global_step,
-                     self.word_count,
-                     self.batch_size,
-                     self.grad_norm,
-                     self.learning_rate])
+    output_tuple = TrainOutputTuple(train_summary=self.train_summary,
+                                    train_loss=self.train_loss,
+                                    predict_count=self.predict_count,
+                                    global_step=self.global_step,
+                                    word_count=self.word_count,
+                                    batch_size=self.batch_size,
+                                    grad_norm=self.grad_norm,
+                                    learning_rate=self.learning_rate)
+    return sess.run([self.update, output_tuple])
 
   def eval(self, sess):
+    """Execute eval graph."""
     assert self.mode == tf.contrib.learn.ModeKeys.EVAL
-    return sess.run([self.eval_loss,
-                     self.predict_count,
-                     self.batch_size])
+    output_tuple = EvalOutputTuple(eval_loss=self.eval_loss,
+                                   predict_count=self.predict_count,
+                                   batch_size=self.batch_size)
+    return sess.run(output_tuple)
 
   def build_graph(self, hparams, scope=None):
     """Subclass must implement this method.
@@ -280,11 +333,12 @@ class BaseModel(object):
       scope: VariableScope for the created subgraph; default "dynamic_seq2seq".
 
     Returns:
-      A tuple of the form (logits, loss, final_context_state),
+      A tuple of the form (logits, loss_tuple, final_context_state, sample_id),
       where:
         logits: float32 Tensor [batch_size x num_decoder_symbols].
-        loss: the total loss / batch_size.
-        final_context_state: The final state of decoder RNN.
+        loss: loss = the total loss / batch_size.
+        final_context_state: the final state of decoder RNN.
+        sample_id: sampling indices.
 
     Raises:
       ValueError: if encoder_type differs from mono and bi, or
@@ -308,7 +362,7 @@ class BaseModel(object):
                                                    self.num_gpus)):
           loss = self._compute_loss(logits)
       else:
-        loss = None
+        loss = tf.constant(0.0)
 
       return logits, loss, final_context_state, sample_id
 
@@ -426,7 +480,6 @@ class BaseModel(object):
         length_penalty_weight = hparams.length_penalty_weight
         start_tokens = tf.fill([self.batch_size], tgt_sos_id)
         end_token = tgt_eos_id
-
         if beam_width > 0:
           my_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
               cell=cell,
@@ -513,13 +566,16 @@ class BaseModel(object):
     return loss
 
   def _get_infer_summary(self, hparams):
+    del hparams
     return tf.no_op()
 
   def infer(self, sess):
     assert self.mode == tf.contrib.learn.ModeKeys.INFER
-    return sess.run([
-        self.infer_logits, self.infer_summary, self.sample_id, self.sample_words
-    ])
+    output_tuple = InferOutputTuple(infer_logits=self.infer_logits,
+                                    infer_summary=self.infer_summary,
+                                    sample_id=self.sample_id,
+                                    sample_words=self.sample_words)
+    return sess.run(output_tuple)
 
   def decode(self, sess):
     """Decode a batch.
@@ -531,7 +587,9 @@ class BaseModel(object):
       A tuple consiting of outputs, infer_summary.
         outputs: of size [batch_size, time]
     """
-    _, infer_summary, _, sample_words = self.infer(sess)
+    output_tuple = self.infer(sess)
+    sample_words = output_tuple.sample_words
+    infer_summary = output_tuple.infer_summary
 
     # make sure outputs is of shape [batch_size, time] or [beam_width,
     # batch_size, time] when using beam search.
@@ -650,7 +708,7 @@ class Model(BaseModel):
     return tf.concat(bi_outputs, -1), bi_state
 
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
-                          source_sequence_length):
+                          source_sequence_length, base_gpu=0):
     """Build an RNN cell that can be used by decoder."""
     # We only make use of encoder_outputs in attention-based models
     if hparams.attention:
@@ -665,7 +723,9 @@ class Model(BaseModel):
         dropout=hparams.dropout,
         num_gpus=self.num_gpus,
         mode=self.mode,
-        single_cell_fn=self.single_cell_fn)
+        single_cell_fn=self.single_cell_fn,
+        base_gpu=base_gpu
+    )
 
     # For beam search, we need to replicate encoder infos beam_width times
     if self.mode == tf.contrib.learn.ModeKeys.INFER and hparams.beam_width > 0:

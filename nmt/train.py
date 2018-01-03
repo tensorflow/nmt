@@ -204,17 +204,17 @@ def init_stats():
 
 def update_stats(stats, start_time, step_result):
   """Update stats: write summary and accumulate statistics."""
-  (_, step_loss, step_predict_count, step_summary, global_step,
-   step_word_count, batch_size, grad_norm, learning_rate) = step_result
+  _, output_tuple = step_result
 
   # Update statistics
   stats["step_time"] += (time.time() - start_time)
-  stats["loss"] += (step_loss * batch_size)
-  stats["predict_count"] += step_predict_count
-  stats["total_count"] += float(step_word_count)
-  stats["grad_norm"] += grad_norm
+  stats["loss"] += (output_tuple.train_loss * output_tuple.batch_size)
+  stats["predict_count"] += output_tuple.predict_count
+  stats["total_count"] += float(output_tuple.word_count)
+  stats["grad_norm"] += output_tuple.grad_norm
 
-  return global_step, learning_rate, step_summary
+  return (output_tuple.global_step, output_tuple.learning_rate,
+          output_tuple.train_summary)
 
 
 def print_step_info(prefix, global_step, info, result_summary, log_f):
