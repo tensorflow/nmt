@@ -69,7 +69,7 @@ with the latest research ideas. We achieve this goal by:
 
 We believe that it is important to provide benchmarks that people can easily
 replicate. As a result, we have provided full experimental results and
-pretrained on models on the following publicly available datasets:
+pretrained our models on the following publicly available datasets:
 
 1. *Small-scale*: English-Vietnamese parallel corpus of TED talks (133K sentence
    pairs) provided by
