@@ -479,9 +479,25 @@ def gradient_clip(gradients, max_gradient_norm):
   return clipped_gradients, gradient_norm_summary, gradient_norm
 
 
+def print_variables_in_ckpt(ckpt):
+  """Print a list of variables in a checkpoint together with their shapes."""
+  utils.print_out("# Variables in ckpt %s" % ckpt)
+  reader = tf.train.NewCheckpointReader(ckpt)
+  variable_map = reader.get_variable_to_shape_map()
+  for key in sorted(variable_map.keys()):
+    utils.print_out("  %s: %s" % (key, variable_map[key]))
+
+
 def load_model(model, ckpt, session, name):
+  """Load model from a checkpoint."""
   start_time = time.time()
-  model.saver.restore(session, ckpt)
+  try:
+    model.saver.restore(session, ckpt)
+  except tf.errors.NotFoundError as e:
+    utils.print_out("Can't load checkpoint")
+    print_variables_in_ckpt(ckpt)
+    utils.print_out("%s" % str(e))
+
   session.run(tf.tables_initializer())
   utils.print_out(
       "  loaded %s model parameters from %s, time %.2fs" %
