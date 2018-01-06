@@ -257,6 +257,8 @@ def add_arguments(parser):
                       help=("""\
       Reference file to compute evaluation scores (if provided).\
       """))
+
+  # Advanced inference arguments
   parser.add_argument("--beam_width", type=int, default=0,
                       help=("""\
       beam width when using beam search decoder. If 0 (default), use standard
@@ -341,6 +343,8 @@ def create_hparams(flags):
       src_max_len_infer=flags.src_max_len_infer,
       tgt_max_len_infer=flags.tgt_max_len_infer,
       infer_batch_size=flags.infer_batch_size,
+
+      # Advanced inference arguments
       beam_width=flags.beam_width,
       length_penalty_weight=flags.length_penalty_weight,
       sampling_temperature=flags.sampling_temperature,
@@ -370,16 +374,17 @@ def create_hparams(flags):
   )
 
 
-def extend_hparams(hparams):
-  """Extend training hparams."""
-  assert hparams.num_encoder_layers and hparams.num_decoder_layers
-  if hparams.num_encoder_layers != hparams.num_decoder_layers:
-    hparams.pass_hidden_state = False
-    utils.print_out("Num encoder layer %d is different from num decoder layer"
-                    " %d, so set pass_hidden_state to False" % (
-                        hparams.num_encoder_layers,
-                        hparams.num_decoder_layers))
+def _add_argument(hparams, key, value, update=True):
+  """Add an argument to hparams; if exists, change the value if update==True."""
+  if hasattr(hparams, key):
+    if update:
+      setattr(hparams, key, value)
+  else:
+    hparams.add_hparam(key, value)
 
+
+def extend_hparams(hparams):
+  """Add new arguments to hparams."""
   # Sanity checks
   if hparams.encoder_type == "bi" and hparams.num_encoder_layers % 2 != 0:
     raise ValueError("For bi, num_encoder_layers %d should be even" %
@@ -389,6 +394,17 @@ def extend_hparams(hparams):
     raise ValueError("For gnmt attention architecture, "
                      "num_encoder_layers %d should be >= 2" %
                      hparams.num_encoder_layers)
+  if hparams.subword_option and hparams.subword_option not in ["spm", "bpe"]:
+    raise ValueError("subword option must be either spm, or bpe")
+
+  # Different number of encoder / decoder layers
+  assert hparams.num_encoder_layers and hparams.num_decoder_layers
+  if hparams.num_encoder_layers != hparams.num_decoder_layers:
+    hparams.pass_hidden_state = False
+    utils.print_out("Num encoder layer %d is different from num decoder layer"
+                    " %d, so set pass_hidden_state to False" % (
+                        hparams.num_encoder_layers,
+                        hparams.num_decoder_layers))
 
   # Set residual layers
   num_encoder_residual_layers = 0
@@ -408,20 +424,10 @@ def extend_hparams(hparams):
       # Compatible for GNMT models
       if hparams.num_encoder_layers == hparams.num_decoder_layers:
         num_decoder_residual_layers = num_encoder_residual_layers
-  hparams.add_hparam("num_encoder_residual_layers", num_encoder_residual_layers)
-  hparams.add_hparam("num_decoder_residual_layers", num_decoder_residual_layers)
-
-  if hparams.subword_option and hparams.subword_option not in ["spm", "bpe"]:
-    raise ValueError("subword option must be either spm, or bpe")
-
-  # Flags
-  utils.print_out("# hparams:")
-  utils.print_out("  src=%s" % hparams.src)
-  utils.print_out("  tgt=%s" % hparams.tgt)
-  utils.print_out("  train_prefix=%s" % hparams.train_prefix)
-  utils.print_out("  dev_prefix=%s" % hparams.dev_prefix)
-  utils.print_out("  test_prefix=%s" % hparams.test_prefix)
-  utils.print_out("  out_dir=%s" % hparams.out_dir)
+  _add_argument(hparams, "num_encoder_residual_layers",
+                num_encoder_residual_layers)
+  _add_argument(hparams, "num_decoder_residual_layers",
+                num_decoder_residual_layers)
 
   ## Vocab
   # Get vocab file names first
@@ -453,14 +459,14 @@ def extend_hparams(hparams):
         sos=hparams.sos,
         eos=hparams.eos,
         unk=vocab_utils.UNK)
-  hparams.add_hparam("src_vocab_size", src_vocab_size)
-  hparams.add_hparam("tgt_vocab_size", tgt_vocab_size)
-  hparams.add_hparam("src_vocab_file", src_vocab_file)
-  hparams.add_hparam("tgt_vocab_file", tgt_vocab_file)
+  _add_argument(hparams, "src_vocab_size", src_vocab_size)
+  _add_argument(hparams, "tgt_vocab_size", tgt_vocab_size)
+  _add_argument(hparams, "src_vocab_file", src_vocab_file)
+  _add_argument(hparams, "tgt_vocab_file", tgt_vocab_file)
 
   # Pretrained Embeddings:
-  hparams.add_hparam("src_embed_file", "")
-  hparams.add_hparam("tgt_embed_file", "")
+  _add_argument(hparams, "src_embed_file", "")
+  _add_argument(hparams, "tgt_embed_file", "")
   if hparams.embed_prefix:
     src_embed_file = hparams.embed_prefix + "." + hparams.src
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
@@ -471,23 +477,18 @@ def extend_hparams(hparams):
     if tf.gfile.Exists(tgt_embed_file):
       hparams.tgt_embed_file = tgt_embed_file
 
-  # Check out_dir
-  if not tf.gfile.Exists(hparams.out_dir):
-    utils.print_out("# Creating output directory %s ..." % hparams.out_dir)
-    tf.gfile.MakeDirs(hparams.out_dir)
-
   # Evaluation
   for metric in hparams.metrics:
-    hparams.add_hparam("best_" + metric, 0)  # larger is better
     best_metric_dir = os.path.join(hparams.out_dir, "best_" + metric)
-    hparams.add_hparam("best_" + metric + "_dir", best_metric_dir)
     tf.gfile.MakeDirs(best_metric_dir)
+    _add_argument(hparams, "best_" + metric, 0, update=False)
+    _add_argument(hparams, "best_" + metric + "_dir", best_metric_dir)
 
     if hparams.avg_ckpts:
-      hparams.add_hparam("avg_best_" + metric, 0)  # larger is better
       best_metric_dir = os.path.join(hparams.out_dir, "avg_best_" + metric)
-      hparams.add_hparam("avg_best_" + metric + "_dir", best_metric_dir)
       tf.gfile.MakeDirs(best_metric_dir)
+      _add_argument(hparams, "avg_best_" + metric, 0, update=False)
+      _add_argument(hparams, "avg_best_" + metric + "_dir", best_metric_dir)
 
   return hparams
 
@@ -496,6 +497,11 @@ def ensure_compatible_hparams(hparams, default_hparams, hparams_path):
   """Make sure the loaded hparams is compatible with new changes."""
   default_hparams = utils.maybe_parse_standard_hparams(
       default_hparams, hparams_path)
+  # Set num encoder/decoder layers (for old checkpoints)
+  if not hasattr(hparams, "num_encoder_layers"):
+    hparams.add_hparam("num_encoder_layers", hparams.num_layers)
+  if not hasattr(hparams, "num_decoder_layers"):
+    hparams.add_hparam("num_decoder_layers", hparams.num_layers)
 
   # For compatible reason, if there are new fields in default_hparams,
   #   we add them to the current hparams
@@ -507,12 +513,17 @@ def ensure_compatible_hparams(hparams, default_hparams, hparams_path):
 
   # Update all hparams' keys if override_loaded_hparams=True
   if default_hparams.override_loaded_hparams:
-    for key in default_config:
-      if getattr(hparams, key) != default_config[key]:
-        utils.print_out("# Updating hparams.%s: %s -> %s" %
-                        (key, str(getattr(hparams, key)),
-                         str(default_config[key])))
-        setattr(hparams, key, default_config[key])
+    overwritten_keys = default_config.keys()
+  else:
+    # For inference
+    overwritten_keys = ["infer_batch_size", "beam_width", "length_penalty_weight",
+                        "sampling_temperature", "num_translations_per_input"]
+  for key in overwritten_keys:
+    if getattr(hparams, key) != default_config[key]:
+      utils.print_out("# Updating hparams.%s: %s -> %s" %
+                      (key, str(getattr(hparams, key)),
+                       str(default_config[key])))
+      setattr(hparams, key, default_config[key])
   return hparams
 
 
@@ -524,9 +535,9 @@ def create_or_load_hparams(
     hparams = default_hparams
     hparams = utils.maybe_parse_standard_hparams(
         hparams, hparams_path)
-    hparams = extend_hparams(hparams)
   else:
     hparams = ensure_compatible_hparams(hparams, default_hparams, hparams_path)
+  hparams = extend_hparams(hparams)
 
   # Save HParams
   if save_hparams:
@@ -553,15 +564,36 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
     random.seed(random_seed + jobid)
     np.random.seed(random_seed + jobid)
 
-  ## Train / Decode
+  # Model output directory
   out_dir = flags.out_dir
-  if not tf.gfile.Exists(out_dir): tf.gfile.MakeDirs(out_dir)
+  if out_dir and not tf.gfile.Exists(out_dir):
+    utils.print_out("# Creating output directory %s ..." % out_dir)
+    tf.gfile.MakeDirs(out_dir)
 
   # Load hparams.
-  hparams = create_or_load_hparams(
-      out_dir, default_hparams, flags.hparams_path, save_hparams=(jobid == 0))
+  loaded_hparams = False
+  if flags.ckpt:  # Try to load hparams from the same directory as ckpt
+    ckpt_dir = os.path.dirname(flags.ckpt)
+    ckpt_hparams_file = os.path.join(ckpt_dir, "hparams")
+    if tf.gfile.Exists(ckpt_hparams_file) or flags.hparams_path:
+      hparams = create_or_load_hparams(
+          ckpt_dir, default_hparams, flags.hparams_path,
+          save_hparams=False)
+      loaded_hparams = True
+  if not loaded_hparams:  # Try to load from out_dir
+    assert out_dir
+    hparams = create_or_load_hparams(
+        out_dir, default_hparams, flags.hparams_path,
+        save_hparams=(jobid == 0))
 
+  ## Train / Decode
   if flags.inference_input_file:
+    # Inference output directory
+    trans_file = flags.inference_output_file
+    assert trans_file
+    trans_dir = os.path.dirname(trans_file)
+    if not tf.gfile.Exists(trans_dir): tf.gfile.MakeDirs(trans_dir)
+
     # Inference indices
     hparams.inference_indices = None
     if flags.inference_list:
@@ -569,7 +601,6 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
           [int(token)  for token in flags.inference_list.split(",")])
 
     # Inference
-    trans_file = flags.inference_output_file
     ckpt = flags.ckpt
     if not ckpt:
       ckpt = tf.train.latest_checkpoint(out_dir)
