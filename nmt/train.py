@@ -35,7 +35,7 @@ utils.check_tensorflow_version()
 __all__ = [
     "run_sample_decode", "run_internal_eval", "run_external_eval",
     "run_avg_external_eval", "run_full_eval", "init_stats", "update_stats",
-    "print_step_info", "process_stats", "train"
+    "print_step_info", "process_stats", "train", "get_model_creator"
 ]
 
 
@@ -268,6 +268,21 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
   return stats, info, start_train_time
 
 
+def get_model_creator(hparams):
+  """Get the right model class depending on configuration."""
+  if (hparams.encoder_type == "gnmt" or
+      hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+    model_creator = gnmt_model.GNMTModel
+  elif hparams.attention_architecture == "standard":
+    model_creator = attention_model.AttentionModel
+  elif not hparams.attention:
+    model_creator = nmt_model.Model
+  else:
+    raise ValueError("Unknown attention architecture %s" %
+                     hparams.attention_architecture)
+  return model_creator
+
+
 def train(hparams, scope=None, target_session=""):
   """Train a translation model."""
   log_device_placement = hparams.log_device_placement
@@ -281,18 +296,8 @@ def train(hparams, scope=None, target_session=""):
   if not steps_per_external_eval:
     steps_per_external_eval = 5 * steps_per_eval
 
-  if not hparams.attention:
-    model_creator = nmt_model.Model
-  else:  # Attention
-    if (hparams.encoder_type == "gnmt" or
-        hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
-      model_creator = gnmt_model.GNMTModel
-    elif hparams.attention_architecture == "standard":
-      model_creator = attention_model.AttentionModel
-    else:
-      raise ValueError("Unknown attention architecture %s" %
-                       hparams.attention_architecture)
-
+  # Create model
+  model_creator = get_model_creator(hparams)
   train_model = model_helper.create_train_model(model_creator, hparams, scope)
   eval_model = model_helper.create_eval_model(model_creator, hparams, scope)
   infer_model = model_helper.create_infer_model(model_creator, hparams, scope)

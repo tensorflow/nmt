@@ -80,6 +80,21 @@ def load_data(inference_input_file, hparams=None):
   return inference_data
 
 
+def get_model_creator(hparams):
+  """Get the right model class depending on configuration."""
+  if (hparams.encoder_type == "gnmt" or
+      hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+    model_creator = gnmt_model.GNMTModel
+  elif hparams.attention_architecture == "standard":
+    model_creator = attention_model.AttentionModel
+  elif not hparams.attention:
+    model_creator = nmt_model.Model
+  else:
+    raise ValueError("Unknown attention architecture %s" %
+                     hparams.attention_architecture)
+  return model_creator
+
+
 def inference(ckpt,
               inference_input_file,
               inference_output_file,
@@ -91,14 +106,7 @@ def inference(ckpt,
   if hparams.inference_indices:
     assert num_workers == 1
 
-  if not hparams.attention:
-    model_creator = nmt_model.Model
-  elif hparams.attention_architecture == "standard":
-    model_creator = attention_model.AttentionModel
-  elif hparams.attention_architecture in ["gnmt", "gnmt_v2"]:
-    model_creator = gnmt_model.GNMTModel
-  else:
-    raise ValueError("Unknown model architecture")
+  model_creator = get_model_creator(hparams)
   infer_model = model_helper.create_infer_model(model_creator, hparams, scope)
 
   if num_workers == 1:

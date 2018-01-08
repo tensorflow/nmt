@@ -44,11 +44,14 @@ class AttentionModel(model.Model):
                reverse_target_vocab_table=None,
                scope=None,
                extra_args=None):
+    self.has_attention = hparams.attention_architecture and hparams.attention
+
     # Set attention_mechanism_fn
-    if extra_args and extra_args.attention_mechanism_fn:
-      self.attention_mechanism_fn = extra_args.attention_mechanism_fn
-    else:
-      self.attention_mechanism_fn = create_attention_mechanism
+    if self.has_attention:
+      if extra_args and extra_args.attention_mechanism_fn:
+        self.attention_mechanism_fn = extra_args.attention_mechanism_fn
+      else:
+        self.attention_mechanism_fn = create_attention_mechanism
 
     super(AttentionModel, self).__init__(
         hparams=hparams,
@@ -66,12 +69,13 @@ class AttentionModel(model.Model):
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
                           source_sequence_length):
     """Build a RNN cell with attention mechanism that can be used by decoder."""
-    attention_option = hparams.attention
-    attention_architecture = hparams.attention_architecture
-
-    if attention_architecture != "standard":
+    # No Attention
+    if not self.has_attention:
+      return super(AttentionModel, self)._build_decoder_cell(
+          hparams, encoder_outputs, encoder_state, source_sequence_length)
+    elif hparams.attention_architecture != "standard":
       raise ValueError(
-          "Unknown attention architecture %s" % attention_architecture)
+          "Unknown attention architecture %s" % hparams.attention_architecture)
 
     num_units = hparams.num_units
     num_layers = self.num_decoder_layers
@@ -97,8 +101,9 @@ class AttentionModel(model.Model):
     else:
       batch_size = self.batch_size
 
+    # Attention
     attention_mechanism = self.attention_mechanism_fn(
-        attention_option, num_units, memory, source_sequence_length, self.mode)
+        hparams.attention, num_units, memory, source_sequence_length, self.mode)
 
     cell = model_helper.create_rnn_cell(
         unit_type=hparams.unit_type,
@@ -136,7 +141,7 @@ class AttentionModel(model.Model):
     return cell, decoder_initial_state
 
   def _get_infer_summary(self, hparams):
-    if hparams.beam_width > 0:
+    if not self.has_attention or hparams.beam_width > 0:
       return tf.no_op()
     return _create_attention_images_summary(self.final_context_state)
 
