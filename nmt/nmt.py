@@ -557,6 +557,10 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
   num_workers = flags.num_workers
   utils.print_out("# Job id %d" % jobid)
 
+  # GPU device
+  utils.print_out(
+      "# Devices visible to TensorFlow: %s" % repr(tf.Session().list_devices()))
+
   # Random
   random_seed = flags.random_seed
   if random_seed is not None and random_seed > 0:

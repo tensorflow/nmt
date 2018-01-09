@@ -155,6 +155,7 @@ class BaseModel(object):
 
     # Print trainable variables
     utils.print_out("# Trainable variables")
+    utils.print_out("Format: <name>, <shape>, <(soft) device placement>")
     for param in params:
       utils.print_out("  %s, %s, %s" % (param.name, str(param.get_shape()),
                                         param.op.device))
