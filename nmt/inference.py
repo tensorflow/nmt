@@ -95,7 +95,7 @@ def get_model_creator(hparams):
   return model_creator
 
 
-def inference(ckpt,
+def inference(ckpt_path,
               inference_input_file,
               inference_output_file,
               hparams,
@@ -112,14 +112,14 @@ def inference(ckpt,
   if num_workers == 1:
     single_worker_inference(
         infer_model,
-        ckpt,
+        ckpt_path,
         inference_input_file,
         inference_output_file,
         hparams)
   else:
     multi_worker_inference(
         infer_model,
-        ckpt,
+        ckpt_path,
         inference_input_file,
         inference_output_file,
         hparams,
@@ -128,7 +128,7 @@ def inference(ckpt,
 
 
 def single_worker_inference(infer_model,
-                            ckpt,
+                            ckpt_path,
                             inference_input_file,
                             inference_output_file,
                             hparams):
@@ -141,7 +141,7 @@ def single_worker_inference(infer_model,
   with tf.Session(
       graph=infer_model.graph, config=utils.get_config_proto()) as sess:
     loaded_infer_model = model_helper.load_model(
-        infer_model.model, ckpt, sess, "infer")
+        infer_model.model, ckpt_path, sess, "infer")
     sess.run(
         infer_model.iterator.initializer,
         feed_dict={
@@ -174,7 +174,7 @@ def single_worker_inference(infer_model,
 
 
 def multi_worker_inference(infer_model,
-                           ckpt,
+                           ckpt_path,
                            inference_input_file,
                            inference_output_file,
                            hparams,
@@ -200,7 +200,7 @@ def multi_worker_inference(infer_model,
   with tf.Session(
       graph=infer_model.graph, config=utils.get_config_proto()) as sess:
     loaded_infer_model = model_helper.load_model(
-        infer_model.model, ckpt, sess, "infer")
+        infer_model.model, ckpt_path, sess, "infer")
     sess.run(infer_model.iterator.initializer,
              {
                  infer_model.src_placeholder: infer_data,
