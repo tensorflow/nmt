@@ -35,7 +35,8 @@ utils.check_tensorflow_version()
 __all__ = [
     "run_sample_decode", "run_internal_eval", "run_external_eval",
     "run_avg_external_eval", "run_full_eval", "init_stats", "update_stats",
-    "print_step_info", "process_stats", "train", "get_model_creator"
+    "print_step_info", "process_stats", "train", "get_model_creator",
+    "add_info_summaries", "get_best_results"
 ]
 
 
@@ -198,8 +199,11 @@ def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
 
 def init_stats():
   """Initialize statistics that we want to accumulate."""
-  return {"step_time": 0.0, "loss": 0.0, "predict_count": 0.0,
-          "total_count": 0.0, "grad_norm": 0.0}
+  return {"step_time": 0.0, "train_loss": 0.0,
+          "predict_count": 0.0,  # word count on the target side
+          "word_count": 0.0,  # word counts for both source and target
+          "sequence_count": 0.0,  # number of training examples processed
+          "grad_norm": 0.0}
 
 
 def update_stats(stats, start_time, step_result):
@@ -207,11 +211,13 @@ def update_stats(stats, start_time, step_result):
   _, output_tuple = step_result
 
   # Update statistics
-  stats["step_time"] += (time.time() - start_time)
-  stats["loss"] += (output_tuple.train_loss * output_tuple.batch_size)
-  stats["predict_count"] += output_tuple.predict_count
-  stats["total_count"] += float(output_tuple.word_count)
+  batch_size = output_tuple.batch_size
+  stats["step_time"] += time.time() - start_time
+  stats["train_loss"] += output_tuple.train_loss * batch_size
   stats["grad_norm"] += output_tuple.grad_norm
+  stats["predict_count"] += output_tuple.predict_count
+  stats["word_count"] += output_tuple.word_count
+  stats["sequence_count"] += batch_size
 
   return (output_tuple.global_step, output_tuple.learning_rate,
           output_tuple.train_summary)
@@ -227,13 +233,25 @@ def print_step_info(prefix, global_step, info, result_summary, log_f):
       log_f)
 
 
+def add_info_summaries(summary_writer, global_step, info):
+  """Add stuffs in info to summaries."""
+  excluded_list = ["learning_rate"]
+  for key in info:
+    if key not in excluded_list:
+      utils.add_summary(summary_writer, global_step, key, info[key])
+
+
 def process_stats(stats, info, global_step, steps_per_stats, log_f):
   """Update info and check for overflow."""
-  # Update info
+  # Per-step info
   info["avg_step_time"] = stats["step_time"] / steps_per_stats
   info["avg_grad_norm"] = stats["grad_norm"] / steps_per_stats
-  info["train_ppl"] = utils.safe_exp(stats["loss"] / stats["predict_count"])
-  info["speed"] = stats["total_count"] / (1000 * stats["step_time"])
+  info["avg_sequence_count"] = stats["sequence_count"] / steps_per_stats
+  info["speed"] = stats["word_count"] / (1000 * stats["step_time"])
+
+  # Per-predict info
+  info["train_ppl"] = (
+      utils.safe_exp(stats["train_loss"] / stats["predict_count"]))
 
   # Check for overflow
   is_overflow = False
@@ -250,8 +268,10 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
                  hparams, log_f):
   """Misc tasks to do before training."""
   stats = init_stats()
-  info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
+  info = {"train_ppl": 0.0, "speed": 0.0,
+          "avg_step_time": 0.0,
           "avg_grad_norm": 0.0,
+          "avg_sequence_count": 0.0,
           "learning_rate": loaded_train_model.learning_rate.eval(
               session=train_sess)}
   start_train_time = time.time()
@@ -386,7 +406,7 @@ def train(hparams, scope=None, target_session=""):
       last_stats_step = global_step
       is_overflow = process_stats(
           stats, info, global_step, steps_per_stats, log_f)
-      print_step_info("  ", global_step, info, _get_best_results(hparams),
+      print_step_info("  ", global_step, info, get_best_results(hparams),
                       log_f)
       if is_overflow:
         break
@@ -397,8 +417,7 @@ def train(hparams, scope=None, target_session=""):
     if global_step - last_eval_step >= steps_per_eval:
       last_eval_step = global_step
       utils.print_out("# Save eval, global step %d" % global_step)
-      utils.add_summary(summary_writer, global_step, "train_ppl",
-                        info["train_ppl"])
+      add_info_summaries(summary_writer, global_step, info)
 
       # Save checkpoint
       loaded_train_model.saver.save(
@@ -487,7 +506,7 @@ def _format_results(name, ppl, scores, metrics):
   return result_str
 
 
-def _get_best_results(hparams):
+def get_best_results(hparams):
   """Summary of the current best results."""
   tokens = []
   for metric in hparams.metrics:
