@@ -47,7 +47,7 @@ def create_test_hparams(unit_type="lstm",
   standard_hparams = standard_hparams_utils.create_standard_hparams()
 
   # Networks
-  standard_hparams.num_units  =  5
+  standard_hparams.num_units = 5
   standard_hparams.num_encoder_layers = num_layers
   standard_hparams.num_decoder_layers = num_layers
   standard_hparams.dropout = 0.5
@@ -77,8 +77,8 @@ def create_test_hparams(unit_type="lstm",
   # Vocab
   standard_hparams.src_vocab_size = 5
   standard_hparams.tgt_vocab_size = 5
-  standard_hparams.eos = "eos"
-  standard_hparams.sos = "sos"
+  standard_hparams.eos = "</s>"
+  standard_hparams.sos = "<s>"
   standard_hparams.src_vocab_file = ""
   standard_hparams.tgt_vocab_file = ""
   standard_hparams.src_embed_file = ""

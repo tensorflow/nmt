@@ -34,6 +34,9 @@ float32 = np.float32
 int32 = np.int32
 array = np.array
 
+SOS = '<s>'
+EOS = '</s>'
+
 
 class ModelTest(tf.test.TestCase):
 
@@ -186,15 +189,15 @@ class ModelTest(tf.test.TestCase):
     cls.actual_beam_sentences = {}
     cls.expected_beam_sentences = {
         'BeamSearchAttentionModel: batch 0 of beam 0': '',
-        'BeamSearchAttentionModel: batch 0 of beam 1': 'sos a sos a',
+        'BeamSearchAttentionModel: batch 0 of beam 1': '%s a %s a' % (SOS, SOS),
         'BeamSearchAttentionModel: batch 1 of beam 0': '',
         'BeamSearchAttentionModel: batch 1 of beam 1': 'b',
         'BeamSearchBasicModel: batch 0 of beam 0': 'b b b b',
-        'BeamSearchBasicModel: batch 0 of beam 1': 'b b b sos',
+        'BeamSearchBasicModel: batch 0 of beam 1': 'b b b %s' % SOS,
         'BeamSearchBasicModel: batch 0 of beam 2': 'b b b c',
         'BeamSearchBasicModel: batch 1 of beam 0': 'b b b b',
         'BeamSearchBasicModel: batch 1 of beam 1': 'a b b b',
-        'BeamSearchBasicModel: batch 1 of beam 2': 'b b b sos',
+        'BeamSearchBasicModel: batch 1 of beam 2': 'b b b %s' % SOS,
         'BeamSearchGNMTModel: batch 0 of beam 0': '',
         'BeamSearchGNMTModel: batch 1 of beam 0': '',
     }
@@ -289,7 +292,7 @@ class ModelTest(tf.test.TestCase):
       output_words = nmt_outputs[i]
       for j in range(output_words.shape[0]):
         sentence = nmt_utils.get_translation(
-            output_words, j, tgt_eos='eos', subword_option='')
+            output_words, j, tgt_eos=EOS, subword_option='')
         sentence_key = ('%s: batch %d of beam %d' % (name, j, i))
         self.actual_beam_sentences[sentence_key] = sentence
         expected_sentence = self.expected_beam_sentences[sentence_key]
