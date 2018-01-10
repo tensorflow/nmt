@@ -351,11 +351,11 @@ class BaseModel(object):
 
     with tf.variable_scope(scope or "dynamic_seq2seq", dtype=dtype):
       # Encoder
-      encoder_outputs, encoder_state = self._build_encoder(hparams)
+      self.encoder_outputs, encoder_state = self._build_encoder(hparams)
 
       ## Decoder
       logits, sample_id, final_context_state = self._build_decoder(
-          encoder_outputs, encoder_state, hparams)
+          self.encoder_outputs, encoder_state, hparams)
 
       ## Loss
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
@@ -600,6 +600,16 @@ class BaseModel(object):
                                   # time, beam_width] shape.
       sample_words = sample_words.transpose([2, 0, 1])
     return sample_words, infer_summary
+
+  def compute_encoder_states(self, sess):
+    """Compute encoder states. Return tensor [batch, length, layer, size]."""
+    assert self.mode == tf.contrib.learn.ModeKeys.INFER
+    encoder_states = self.encoder_outputs
+
+    # We only return the top layer for now, so set the third dim to 1.
+    if len(encoder_states.shape) == 3:
+      encoder_states = tf.expand_dims(encoder_states, 2)
+    return sess.run(encoder_states)
 
 
 class Model(BaseModel):
