@@ -604,12 +604,7 @@ class BaseModel(object):
   def compute_encoder_states(self, sess):
     """Compute encoder states. Return tensor [batch, length, layer, size]."""
     assert self.mode == tf.contrib.learn.ModeKeys.INFER
-    encoder_states = self.encoder_outputs
-
-    # We only return the top layer for now, so set the third dim to 1.
-    if len(encoder_states.shape) == 3:
-      encoder_states = tf.expand_dims(encoder_states, 2)
-    return sess.run(encoder_states)
+    return sess.run(tf.stack(self.encoder_state_list, 2))
 
 
 class Model(BaseModel):
@@ -675,6 +670,10 @@ class Model(BaseModel):
           encoder_state = tuple(encoder_state)
       else:
         raise ValueError("Unknown encoder_type %s" % hparams.encoder_type)
+
+    # Use the top layer for now
+    self.encoder_state_list = [encoder_outputs]
+
     return encoder_outputs, encoder_state
 
   def _build_bidirectional_rnn(self, inputs, sequence_length,
