@@ -116,6 +116,9 @@ class GNMTModel(attention_model.AttentionModel):
       encoder_state = (bi_encoder_state[1],) + (
           (encoder_state,) if num_uni_layers == 1 else encoder_state)
 
+    # Use the top layer for now
+    self.encoder_state_list = [encoder_outputs]
+
     return encoder_outputs, encoder_state
 
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
