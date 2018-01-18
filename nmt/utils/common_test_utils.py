@@ -73,6 +73,7 @@ def create_test_hparams(unit_type="lstm",
   # Misc
   standard_hparams.forget_bias = 0.0
   standard_hparams.random_seed = 3
+  language_model=False
 
   # Vocab
   standard_hparams.src_vocab_size = 5

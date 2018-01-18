@@ -240,6 +240,9 @@ def add_arguments(parser):
                       Average the last N checkpoints for external evaluation.
                       N can be controlled by setting --num_keep_ckpts.\
                       """))
+  parser.add_argument("--language_model", type="bool", nargs="?",
+                      const=True, default=False,
+                      help="True to train a language model, ignoring encoder")
 
   # Inference
   parser.add_argument("--ckpt", type=str, default="",
@@ -369,6 +372,7 @@ def create_hparams(flags):
       override_loaded_hparams=flags.override_loaded_hparams,
       num_keep_ckpts=flags.num_keep_ckpts,
       avg_ckpts=flags.avg_ckpts,
+      language_model=flags.language_model,
       num_intra_threads=flags.num_intra_threads,
       num_inter_threads=flags.num_inter_threads,
   )
@@ -429,6 +433,16 @@ def extend_hparams(hparams):
   _add_argument(hparams, "num_decoder_residual_layers",
                 num_decoder_residual_layers)
 
+  # Language modeling
+  if hparams.language_model:
+    hparams.attention = ""
+    hparams.attention_architecture = ""
+    hparams.pass_hidden_state = False
+    hparams.share_vocab = True
+    hparams.src = hparams.tgt
+    utils.print_out("For language modeling, we turn off attention and "
+                    "pass_hidden_state; turn on share_vocab; set src to tgt.")
+
   ## Vocab
   # Get vocab file names first
   if hparams.vocab_prefix:
@@ -464,10 +478,13 @@ def extend_hparams(hparams):
   _add_argument(hparams, "src_vocab_file", src_vocab_file)
   _add_argument(hparams, "tgt_vocab_file", tgt_vocab_file)
 
-  # Pretrained Embeddings:
+  # Pretrained Embeddings
   _add_argument(hparams, "src_embed_file", "")
   _add_argument(hparams, "tgt_embed_file", "")
   if hparams.embed_prefix:
+    hparams.num_embeddings_partitions = 1
+    utils.print_out(
+        "For pretrained embeddings, set num_embeddings_partitions to 1")
     src_embed_file = hparams.embed_prefix + "." + hparams.src
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
 

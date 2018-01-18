@@ -101,4 +101,7 @@ def create_standard_hparams():
       infer_batch_size=32,
       sampling_temperature=0.0,
       num_translations_per_input=1,
+
+      # Language model
+      language_model=False,
   )

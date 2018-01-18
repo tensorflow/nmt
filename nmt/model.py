@@ -179,6 +179,7 @@ class BaseModel(object):
     self.tgt_vocab_size = hparams.tgt_vocab_size
     self.num_gpus = hparams.num_gpus
     self.time_major = hparams.time_major
+    self.dtype = tf.float32
 
     # extra_args: to make it flexible for adding external customizable code
     self.single_cell_fn = None
@@ -347,11 +348,14 @@ class BaseModel(object):
         bahdanau | normed_bahdanau).
     """
     utils.print_out("# creating %s graph ..." % self.mode)
-    dtype = tf.float32
 
-    with tf.variable_scope(scope or "dynamic_seq2seq", dtype=dtype):
+    with tf.variable_scope(scope or "dynamic_seq2seq", dtype=self.dtype):
       # Encoder
-      self.encoder_outputs, encoder_state = self._build_encoder(hparams)
+      if hparams.language_model:  # no encoder for language modeling
+        self.encoder_outputs = None
+        encoder_state = None
+      else:
+        self.encoder_outputs, encoder_state = self._build_encoder(hparams)
 
       ## Decoder
       logits, sample_id, final_context_state = self._build_decoder(
@@ -736,6 +740,12 @@ class Model(BaseModel):
         single_cell_fn=self.single_cell_fn,
         base_gpu=base_gpu
     )
+
+    if hparams.language_model:
+      encoder_state = cell.zero_state(self.batch_size, self.dtype)
+    elif not hparams.pass_hidden_state:
+      raise ValueError("For non-attentional model, "
+                       "pass_hidden_state needs to be set to True")
 
     # For beam search, we need to replicate encoder infos beam_width times
     if self.mode == tf.contrib.learn.ModeKeys.INFER and hparams.beam_width > 0:
