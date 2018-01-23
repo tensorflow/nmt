@@ -262,6 +262,9 @@ def add_arguments(parser):
       """))
 
   # Advanced inference arguments
+  parser.add_argument("--infer_mode", type=str, default="greedy",
+                      choices=["greedy", "sample", "beam_search"],
+                      help="Which type of decoder to use during inference.")
   parser.add_argument("--beam_width", type=int, default=0,
                       help=("""\
       beam width when using beam search decoder. If 0 (default), use standard
@@ -348,6 +351,7 @@ def create_hparams(flags):
       infer_batch_size=flags.infer_batch_size,
 
       # Advanced inference arguments
+      infer_mode=flags.infer_mode,
       beam_width=flags.beam_width,
       length_penalty_weight=flags.length_penalty_weight,
       sampling_temperature=flags.sampling_temperature,
@@ -400,6 +404,12 @@ def extend_hparams(hparams):
                      hparams.num_encoder_layers)
   if hparams.subword_option and hparams.subword_option not in ["spm", "bpe"]:
     raise ValueError("subword option must be either spm, or bpe")
+  if hparams.infer_mode == "beam_search" and hparams.beam_width <= 0:
+    raise ValueError("beam_width must greater than 0 when using beam_search"
+                     "decoder.")
+  if hparams.infer_mode == "sample" and hparams.sampling_temperature <= 0.0:
+    raise ValueError("sampling_temperature must greater than 0.0 when using"
+                     "sample decoder.")
 
   # Different number of encoder / decoder layers
   assert hparams.num_encoder_layers and hparams.num_decoder_layers
@@ -533,8 +543,9 @@ def ensure_compatible_hparams(hparams, default_hparams, hparams_path):
     overwritten_keys = default_config.keys()
   else:
     # For inference
-    overwritten_keys = ["infer_batch_size", "beam_width", "length_penalty_weight",
-                        "sampling_temperature", "num_translations_per_input"]
+    overwritten_keys = ["infer_batch_size", "beam_width",
+                        "length_penalty_weight", "sampling_temperature",
+                        "num_translations_per_input", "infer_mode"]
   for key in overwritten_keys:
     if getattr(hparams, key) != default_config[key]:
       utils.print_out("# Updating hparams.%s: %s -> %s" %

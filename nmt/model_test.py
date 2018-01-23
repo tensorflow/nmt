@@ -943,6 +943,7 @@ class ModelTest(tf.test.TestCase):
         attention_architecture='',
         use_residual=False,)
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 3
 
@@ -960,6 +961,7 @@ class ModelTest(tf.test.TestCase):
         num_layers=2,
         use_residual=False,)
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 2
 
@@ -976,6 +978,7 @@ class ModelTest(tf.test.TestCase):
         attention='scaled_luong',
         attention_architecture='gnmt')
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 1
 

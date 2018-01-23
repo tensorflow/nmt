@@ -79,6 +79,8 @@ class InferenceTest(tf.test.TestCase):
         num_translations_per_input=2,
         beam_width=2,
     )
+    hparams.infer_mode = "beam_search"
+
     ckpt_path = self._createTestInferCheckpoint(hparams, "multi_basic_infer")
     infer_file = "nmt/testdata/test_infer_file"
     output_infer = os.path.join(hparams.out_dir, "output_infer")

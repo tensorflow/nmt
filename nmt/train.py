@@ -538,7 +538,7 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
 
   nmt_outputs, attention_summary = model.decode(sess)
 
-  if hparams.beam_width > 0:
+  if hparams.infer_mode == "beam_search":
     # get the top translation.
     nmt_outputs = nmt_outputs[0]
 
@@ -582,7 +582,8 @@ def _external_eval(model, global_step, sess, hparams, iterator,
       subword_option=hparams.subword_option,
       beam_width=hparams.beam_width,
       tgt_eos=hparams.eos,
-      decode=decode)
+      decode=decode,
+      infer_mode=hparams.infer_mode)
   # Save on best metrics
   if decode:
     for metric in hparams.metrics:

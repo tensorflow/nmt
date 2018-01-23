@@ -481,11 +481,13 @@ class BaseModel(object):
 
       ## Inference
       else:
-        beam_width = hparams.beam_width
-        length_penalty_weight = hparams.length_penalty_weight
+        infer_mode = hparams.infer_mode
         start_tokens = tf.fill([self.batch_size], tgt_sos_id)
         end_token = tgt_eos_id
-        if beam_width > 0:
+        if infer_mode == "beam_search":
+          beam_width = hparams.beam_width
+          length_penalty_weight = hparams.length_penalty_weight
+
           my_decoder = tf.contrib.seq2seq.BeamSearchDecoder(
               cell=cell,
               embedding=self.embedding_decoder,
@@ -495,19 +497,23 @@ class BaseModel(object):
               beam_width=beam_width,
               output_layer=self.output_layer,
               length_penalty_weight=length_penalty_weight)
-        else:
+        elif infer_mode == "sample":
           # Helper
           sampling_temperature = hparams.sampling_temperature
-          if sampling_temperature > 0.0:
-            helper = tf.contrib.seq2seq.SampleEmbeddingHelper(
-                self.embedding_decoder, start_tokens, end_token,
-                softmax_temperature=sampling_temperature,
-                seed=hparams.random_seed)
-          else:
-            helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
-                self.embedding_decoder, start_tokens, end_token)
+          assert sampling_temperature > 0.0, (
+              "sampling_temperature must greater than 0.0 when using sample"
+              " decoder.")
+          helper = tf.contrib.seq2seq.SampleEmbeddingHelper(
+              self.embedding_decoder, start_tokens, end_token,
+              softmax_temperature=sampling_temperature,
+              seed=hparams.random_seed)
+        elif infer_mode == "greedy":
+          helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
+              self.embedding_decoder, start_tokens, end_token)
+        else:
+          raise ValueError("Unknown infer_mode '%s'", infer_mode)
 
-          # Decoder
+        if infer_mode != "beam_search":
           my_decoder = tf.contrib.seq2seq.BasicDecoder(
               cell,
               helper,
@@ -523,7 +529,7 @@ class BaseModel(object):
             swap_memory=True,
             scope=decoder_scope)
 
-        if beam_width > 0:
+        if infer_mode == "beam_search":
           logits = tf.no_op()
           sample_id = outputs.predicted_ids
         else:
@@ -748,7 +754,8 @@ class Model(BaseModel):
                        "pass_hidden_state needs to be set to True")
 
     # For beam search, we need to replicate encoder infos beam_width times
-    if self.mode == tf.contrib.learn.ModeKeys.INFER and hparams.beam_width > 0:
+    if (self.mode == tf.contrib.learn.ModeKeys.INFER and
+        hparams.infer_mode == "beam_search"):
       decoder_initial_state = tf.contrib.seq2seq.tile_batch(
           encoder_state, multiplier=hparams.beam_width)
     else:

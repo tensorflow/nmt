@@ -133,7 +133,7 @@ class GNMTModel(attention_model.AttentionModel):
     attention_option = hparams.attention
     attention_architecture = hparams.attention_architecture
     num_units = hparams.num_units
-    beam_width = hparams.beam_width
+    infer_mode = hparams.infer_mode
 
     dtype = tf.float32
 
@@ -142,14 +142,12 @@ class GNMTModel(attention_model.AttentionModel):
     else:
       memory = encoder_outputs
 
-    if self.mode == tf.contrib.learn.ModeKeys.INFER and beam_width > 0:
-      memory = tf.contrib.seq2seq.tile_batch(
-          memory, multiplier=beam_width)
-      source_sequence_length = tf.contrib.seq2seq.tile_batch(
-          source_sequence_length, multiplier=beam_width)
-      encoder_state = tf.contrib.seq2seq.tile_batch(
-          encoder_state, multiplier=beam_width)
-      batch_size = self.batch_size * beam_width
+    if (self.mode == tf.contrib.learn.ModeKeys.INFER and
+        infer_mode == "beam_search"):
+      memory, source_sequence_length, encoder_state, batch_size = (
+          self._prepare_beam_search_decoder_inputs(
+              hparams.beam_width, memory, source_sequence_length,
+              encoder_state))
     else:
       batch_size = self.batch_size
 
@@ -174,7 +172,7 @@ class GNMTModel(attention_model.AttentionModel):
 
     # Only generate alignment in greedy INFER mode.
     alignment_history = (self.mode == tf.contrib.learn.ModeKeys.INFER and
-                         beam_width == 0)
+                         infer_mode != "beam_search")
     attention_cell = tf.contrib.seq2seq.AttentionWrapper(
         attention_cell,
         attention_mechanism,
@@ -210,7 +208,7 @@ class GNMTModel(attention_model.AttentionModel):
       return super(GNMTModel, self)._get_infer_summary(hparams)
 
     # GNMT attention
-    if hparams.beam_width > 0:
+    if hparams.infer_mode == "beam_search":
       return tf.no_op()
     return attention_model._create_attention_images_summary(
         self.final_context_state[0])

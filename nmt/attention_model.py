@@ -66,6 +66,19 @@ class AttentionModel(model.Model):
     if self.mode == tf.contrib.learn.ModeKeys.INFER:
       self.infer_summary = self._get_infer_summary(hparams)
 
+
+  def _prepare_beam_search_decoder_inputs(
+      self, beam_width, memory, source_sequence_length, encoder_state):
+    memory = tf.contrib.seq2seq.tile_batch(
+        memory, multiplier=beam_width)
+    source_sequence_length = tf.contrib.seq2seq.tile_batch(
+        source_sequence_length, multiplier=beam_width)
+    encoder_state = tf.contrib.seq2seq.tile_batch(
+        encoder_state, multiplier=beam_width)
+    batch_size = self.batch_size * beam_width
+    return memory, source_sequence_length, encoder_state, batch_size
+
+
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
                           source_sequence_length):
     """Build a RNN cell with attention mechanism that can be used by decoder."""
@@ -80,7 +93,7 @@ class AttentionModel(model.Model):
     num_units = hparams.num_units
     num_layers = self.num_decoder_layers
     num_residual_layers = self.num_decoder_residual_layers
-    beam_width = hparams.beam_width
+    infer_mode = hparams.infer_mode
 
     dtype = tf.float32
 
@@ -90,14 +103,12 @@ class AttentionModel(model.Model):
     else:
       memory = encoder_outputs
 
-    if self.mode == tf.contrib.learn.ModeKeys.INFER and beam_width > 0:
-      memory = tf.contrib.seq2seq.tile_batch(
-          memory, multiplier=beam_width)
-      source_sequence_length = tf.contrib.seq2seq.tile_batch(
-          source_sequence_length, multiplier=beam_width)
-      encoder_state = tf.contrib.seq2seq.tile_batch(
-          encoder_state, multiplier=beam_width)
-      batch_size = self.batch_size * beam_width
+    if (self.mode == tf.contrib.learn.ModeKeys.INFER and
+        infer_mode == "beam_search"):
+      memory, source_sequence_length, encoder_state, batch_size = (
+          self._prepare_beam_search_decoder_inputs(
+              hparams.beam_width, memory, source_sequence_length,
+              encoder_state))
     else:
       batch_size = self.batch_size
 
@@ -118,7 +129,7 @@ class AttentionModel(model.Model):
 
     # Only generate alignment in greedy INFER mode.
     alignment_history = (self.mode == tf.contrib.learn.ModeKeys.INFER and
-                         beam_width == 0)
+                         infer_mode != "beam_search")
     cell = tf.contrib.seq2seq.AttentionWrapper(
         cell,
         attention_mechanism,
@@ -141,7 +152,7 @@ class AttentionModel(model.Model):
     return cell, decoder_initial_state
 
   def _get_infer_summary(self, hparams):
-    if not self.has_attention or hparams.beam_width > 0:
+    if not self.has_attention or hparams.infer_mode == "beam_search":
       return tf.no_op()
     return _create_attention_images_summary(self.final_context_state)
 

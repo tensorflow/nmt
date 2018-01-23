@@ -170,7 +170,8 @@ def single_worker_inference(infer_model,
           subword_option=hparams.subword_option,
           beam_width=hparams.beam_width,
           tgt_eos=hparams.eos,
-          num_translations_per_input=hparams.num_translations_per_input)
+          num_translations_per_input=hparams.num_translations_per_input,
+          infer_mode=hparams.infer_mode)
 
 
 def multi_worker_inference(infer_model,
@@ -218,7 +219,8 @@ def multi_worker_inference(infer_model,
         subword_option=hparams.subword_option,
         beam_width=hparams.beam_width,
         tgt_eos=hparams.eos,
-        num_translations_per_input=hparams.num_translations_per_input)
+        num_translations_per_input=hparams.num_translations_per_input,
+        infer_mode=hparams.infer_mode)
 
     # Change file name to indicate the file writing is completed.
     tf.gfile.Rename(output_infer, output_infer_done, overwrite=True)
