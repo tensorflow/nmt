@@ -77,12 +77,12 @@ class GNMTModel(attention_model.AttentionModel):
 
       # Look up embedding, emp_inp: [max_time, batch_size, num_units]
       #   when time_major = True
-      encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
-                                               source)
+      self.encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
+                                                    source)
 
       # Execute _build_bidirectional_rnn from Model class
       bi_encoder_outputs, bi_encoder_state = self._build_bidirectional_rnn(
-          inputs=encoder_emb_inp,
+          inputs=self.encoder_emb_inp,
           sequence_length=iterator.source_sequence_length,
           dtype=dtype,
           hparams=hparams,

@@ -611,10 +611,20 @@ class BaseModel(object):
       sample_words = sample_words.transpose([2, 0, 1])
     return sample_words, infer_summary
 
-  def compute_encoder_states(self, sess):
-    """Compute encoder states. Return tensor [batch, length, layer, size]."""
+  def build_encoder_states(self, include_embeddings=False):
+    """Stack encoder states and return tensor [batch, length, layer, size]."""
     assert self.mode == tf.contrib.learn.ModeKeys.INFER
-    return sess.run(tf.stack(self.encoder_state_list, 2))
+    if include_embeddings:
+      stack_state_list = tf.stack(
+          [self.encoder_emb_inp] + self.encoder_state_list, 2)
+    else:
+      stack_state_list = tf.stack(self.encoder_state_list, 2)
+
+    # transform from [length, batch, ...] -> [batch, length, ...]
+    if self.time_major:
+      stack_state_list = tf.transpose(stack_state_list, [1, 0, 2, 3])
+
+    return stack_state_list
 
 
 class Model(BaseModel):
@@ -637,7 +647,7 @@ class Model(BaseModel):
     with tf.variable_scope("encoder") as scope:
       dtype = scope.dtype
       # Look up embedding, emp_inp: [max_time, batch_size, num_units]
-      encoder_emb_inp = tf.nn.embedding_lookup(
+      self.encoder_emb_inp = tf.nn.embedding_lookup(
           self.embedding_encoder, source)
 
       # Encoder_outputs: [max_time, batch_size, num_units]
@@ -649,7 +659,7 @@ class Model(BaseModel):
 
         encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
             cell,
-            encoder_emb_inp,
+            self.encoder_emb_inp,
             dtype=dtype,
             sequence_length=iterator.source_sequence_length,
             time_major=self.time_major,
@@ -662,7 +672,7 @@ class Model(BaseModel):
 
         encoder_outputs, bi_encoder_state = (
             self._build_bidirectional_rnn(
-                inputs=encoder_emb_inp,
+                inputs=self.encoder_emb_inp,
                 sequence_length=iterator.source_sequence_length,
                 dtype=dtype,
                 hparams=hparams,
