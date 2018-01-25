@@ -22,8 +22,6 @@ import abc
 import collections
 import tensorflow as tf
 
-from tensorflow.python.layers import core as layers_core
-
 from . import model_helper
 from .utils import iterator_utils
 from .utils import misc_utils as utils
@@ -89,8 +87,8 @@ class BaseModel(object):
     # Projection
     with tf.variable_scope(scope or "build_network"):
       with tf.variable_scope("decoder/output_projection"):
-        self.output_layer = layers_core.Dense(
-            hparams.tgt_vocab_size, use_bias=False, name="output_projection")
+        self.output_layer = tf.layers.Dense(
+            self.tgt_vocab_size, use_bias=False, name="output_projection")
 
     ## Train graph
     res = self.build_graph(hparams, scope=scope)
@@ -180,11 +178,15 @@ class BaseModel(object):
     self.num_gpus = hparams.num_gpus
     self.time_major = hparams.time_major
     self.dtype = tf.float32
+    self.num_sampled_softmax = hparams.num_sampled_softmax
 
     # extra_args: to make it flexible for adding external customizable code
     self.single_cell_fn = None
     if extra_args:
       self.single_cell_fn = extra_args.single_cell_fn
+
+    # Set num units
+    self.num_units = hparams.num_units
 
     # Set num layers
     self.num_encoder_layers = hparams.num_encoder_layers
@@ -207,8 +209,9 @@ class BaseModel(object):
     self.global_step = tf.Variable(0, trainable=False)
 
     # Initializer
+    self.random_seed = hparams.random_seed
     initializer = model_helper.get_initializer(
-        hparams.init_op, hparams.random_seed, hparams.init_weight)
+        hparams.init_op, self.random_seed, hparams.init_weight)
     tf.get_variable_scope().set_initializer(initializer)
 
     # Embeddings
@@ -288,8 +291,8 @@ class BaseModel(object):
             share_vocab=hparams.share_vocab,
             src_vocab_size=self.src_vocab_size,
             tgt_vocab_size=self.tgt_vocab_size,
-            src_embed_size=hparams.num_units,
-            tgt_embed_size=hparams.num_units,
+            src_embed_size=self.num_units,
+            tgt_embed_size=self.num_units,
             num_partitions=hparams.num_embeddings_partitions,
             src_vocab_file=hparams.src_vocab_file,
             tgt_vocab_file=hparams.tgt_vocab_file,
@@ -358,14 +361,14 @@ class BaseModel(object):
         self.encoder_outputs, encoder_state = self._build_encoder(hparams)
 
       ## Decoder
-      logits, sample_id, final_context_state = self._build_decoder(
-          self.encoder_outputs, encoder_state, hparams)
+      logits, decoder_cell_outputs, sample_id, final_context_state = (
+          self._build_decoder(self.encoder_outputs, encoder_state, hparams))
 
       ## Loss
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
         with tf.device(model_helper.get_device_str(self.num_encoder_layers - 1,
                                                    self.num_gpus)):
-          loss = self._compute_loss(logits)
+          loss = self._compute_loss(logits, decoder_cell_outputs)
       else:
         loss = tf.constant(0.0)
 
@@ -391,7 +394,7 @@ class BaseModel(object):
 
     return model_helper.create_rnn_cell(
         unit_type=hparams.unit_type,
-        num_units=hparams.num_units,
+        num_units=self.num_units,
         num_layers=num_layers,
         num_residual_layers=num_residual_layers,
         forget_bias=hparams.forget_bias,
@@ -442,6 +445,11 @@ class BaseModel(object):
           hparams, encoder_outputs, encoder_state,
           iterator.source_sequence_length)
 
+      # Optional ops depends on which mode we are in and which loss function we
+      # are using.
+      logits = tf.no_op()
+      decoder_cell_outputs = None
+
       ## Train or eval
       if self.mode != tf.contrib.learn.ModeKeys.INFER:
         # decoder_emp_inp: [max_time, batch_size, num_units]
@@ -471,6 +479,10 @@ class BaseModel(object):
 
         sample_id = outputs.sample_id
 
+        if self.num_sampled_softmax > 0:
+          # Note: this is required when using sampled_softmax_loss.
+          decoder_cell_outputs = outputs.rnn_output
+
         # Note: there's a subtle difference here between train and inference.
         # We could have set output_layer when create my_decoder
         #   and shared more code between train and inference.
@@ -478,6 +490,8 @@ class BaseModel(object):
         #   10% improvements for small models & 20% for larger ones.
         # If memory is a concern, we should apply output_layer per timestep.
         logits = self.output_layer(outputs.rnn_output)
+        if self.num_sampled_softmax > 0:
+          logits = tf.no_op()  # unused when using sampled softmax loss.
 
       ## Inference
       else:
@@ -506,7 +520,7 @@ class BaseModel(object):
           helper = tf.contrib.seq2seq.SampleEmbeddingHelper(
               self.embedding_decoder, start_tokens, end_token,
               softmax_temperature=sampling_temperature,
-              seed=hparams.random_seed)
+              seed=self.random_seed)
         elif infer_mode == "greedy":
           helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(
               self.embedding_decoder, start_tokens, end_token)
@@ -530,13 +544,12 @@ class BaseModel(object):
             scope=decoder_scope)
 
         if infer_mode == "beam_search":
-          logits = tf.no_op()
           sample_id = outputs.predicted_ids
         else:
           logits = outputs.rnn_output
           sample_id = outputs.sample_id
 
-    return logits, sample_id, final_context_state
+    return logits, decoder_cell_outputs, sample_id, final_context_state
 
   def get_max_time(self, tensor):
     time_axis = 0 if self.time_major else 1
@@ -559,16 +572,53 @@ class BaseModel(object):
     """
     pass
 
-  def _compute_loss(self, logits):
+
+  def _softmax_cross_entropy_loss(
+      self, logits, decoder_cell_outputs, labels):
+    """Compute softmax loss or sampled softmax loss."""
+    if self.num_sampled_softmax > 0:
+
+      is_sequence = (decoder_cell_outputs.shape.ndims == 3)
+
+      if is_sequence:
+        labels = tf.reshape(labels, [-1, 1])
+        inputs = tf.reshape(decoder_cell_outputs, [-1, self.num_units])
+
+      crossent = tf.nn.sampled_softmax_loss(
+          weights=tf.transpose(self.output_layer.kernel),
+          biases=self.output_layer.bias or tf.zeros([self.tgt_vocab_size]),
+          labels=labels,
+          inputs=inputs,
+          num_sampled=self.num_sampled_softmax,
+          num_classes=self.tgt_vocab_size,
+          partition_strategy='div',
+          seed=self.random_seed)
+
+      if is_sequence:
+        if self.time_major:
+          crossent = tf.reshape(crossent, [-1, self.batch_size])
+        else:
+          crossent = tf.reshape(crossent, [self.batch_size, -1])
+
+    else:
+      crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
+          labels=labels, logits=logits)
+
+    return crossent
+
+
+  def _compute_loss(self, logits, decoder_cell_outputs):
     """Compute optimization loss."""
     target_output = self.iterator.target_output
     if self.time_major:
       target_output = tf.transpose(target_output)
     max_time = self.get_max_time(target_output)
-    crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=target_output, logits=logits)
+
+    crossent = self._softmax_cross_entropy_loss(
+        logits, decoder_cell_outputs, target_output)
+
     target_weights = tf.sequence_mask(
-        self.iterator.target_sequence_length, max_time, dtype=logits.dtype)
+        self.iterator.target_sequence_length, max_time, dtype=self.dtype)
     if self.time_major:
       target_weights = tf.transpose(target_weights)
 
@@ -746,7 +796,7 @@ class Model(BaseModel):
 
     cell = model_helper.create_rnn_cell(
         unit_type=hparams.unit_type,
-        num_units=hparams.num_units,
+        num_units=self.num_units,
         num_layers=self.num_decoder_layers,
         num_residual_layers=self.num_decoder_residual_layers,
         forget_bias=hparams.forget_bias,

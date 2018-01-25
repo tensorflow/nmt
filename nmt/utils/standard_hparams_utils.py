@@ -64,6 +64,7 @@ def create_standard_hparams():
       decay_scheme="luong234",
       colocate_gradients_with_ops=True,
       num_train_steps=12000,
+      num_sampled_softmax=0,
 
       # Data constraints
       num_buckets=5,

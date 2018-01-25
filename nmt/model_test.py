@@ -146,6 +146,7 @@ class ModelTest(tf.test.TestCase):
         'UniEncoderStandardAttentionArchitecture/loss': 8.8519087,
         'InitializerGlorotNormal/loss': 8.9779415,
         'InitializerGlorotUniform/loss': 8.7643699,
+        'SampledSoftmaxLoss/loss': 5.83928,
     }
 
     cls.actual_eval_values = {}
@@ -1015,6 +1016,19 @@ class ModelTest(tf.test.TestCase):
       train_m = self._createTestTrainModel(model.Model, hparams, sess)
       self._assertTrainStepsLoss(train_m, sess,
                                  'InitializerGlorotUniform')
+
+  def testSampledSoftmaxLoss(self):
+    hparams = common_test_utils.create_test_hparams(
+        encoder_type='gnmt',
+        num_layers=4,
+        attention='scaled_luong',
+        attention_architecture='gnmt')
+    hparams.num_sampled_softmax = 3
+
+    with self.test_session() as sess:
+      train_m = self._createTestTrainModel(gnmt_model.GNMTModel, hparams, sess)
+      self._assertTrainStepsLoss(train_m, sess,
+                                 'SampledSoftmaxLoss')
 
 if __name__ == '__main__':
   tf.test.main()

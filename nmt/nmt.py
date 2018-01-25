@@ -202,6 +202,9 @@ def add_arguments(parser):
                       help="Limit on the size of training data (0: no limit).")
   parser.add_argument("--num_buckets", type=int, default=5,
                       help="Put data into similar-length buckets.")
+  parser.add_argument("--num_sampled_softmax", type=int, default=0,
+                      help=("Use sampled_softmax_loss if > 0."
+                            "Otherwise, use full softmax loss."))
 
   # SPM
   parser.add_argument("--subword_option", type=str, default="",
@@ -338,6 +341,7 @@ def create_hparams(flags):
       warmup_scheme=flags.warmup_scheme,
       decay_scheme=flags.decay_scheme,
       colocate_gradients_with_ops=flags.colocate_gradients_with_ops,
+      num_sampled_softmax=flags.num_sampled_softmax,
 
       # Data constraints
       num_buckets=flags.num_buckets,
