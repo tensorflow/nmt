@@ -656,8 +656,8 @@ class BaseModel(object):
     # batch_size, time] when using beam search.
     if self.time_major:
       sample_words = sample_words.transpose()
-    elif sample_words.ndim == 3:  # beam search output in [batch_size,
-                                  # time, beam_width] shape.
+    elif sample_words.ndim == 3:
+      # beam search output in [batch_size, time, beam_width] shape.
       sample_words = sample_words.transpose([2, 0, 1])
     return sample_words, infer_summary
 
@@ -684,34 +684,40 @@ class Model(BaseModel):
   and a multi-layer recurrent neural network decoder.
   """
 
-  def _build_encoder(self, hparams):
-    """Build an encoder."""
+  def _build_encoder_from_sequence(self, hparams, sequence, sequence_length):
+    """Build an encoder from a sequence.
+
+    Args:
+      sequence: tensor with input sequence data.
+      sequence_length: tensor with length of the input sequence.
+    Returns:
+      encoder_outputs: RNN encoder outputs.
+      encoder_state: RNN encoder state.
+    """
     num_layers = self.num_encoder_layers
     num_residual_layers = self.num_encoder_residual_layers
-    iterator = self.iterator
 
-    source = iterator.source
     if self.time_major:
-      source = tf.transpose(source)
+      sequence = tf.transpose(sequence)
 
     with tf.variable_scope("encoder") as scope:
       dtype = scope.dtype
       # Look up embedding, emp_inp: [max_time, batch_size, num_units]
-      self.encoder_emb_inp = tf.nn.embedding_lookup(
-          self.embedding_encoder, source)
+      self.encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
+                                                    sequence)
 
       # Encoder_outputs: [max_time, batch_size, num_units]
       if hparams.encoder_type == "uni":
         utils.print_out("  num_layers = %d, num_residual_layers=%d" %
                         (num_layers, num_residual_layers))
-        cell = self._build_encoder_cell(
-            hparams, num_layers, num_residual_layers)
+        cell = self._build_encoder_cell(hparams, num_layers,
+                                        num_residual_layers)
 
         encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
             cell,
             self.encoder_emb_inp,
             dtype=dtype,
-            sequence_length=iterator.source_sequence_length,
+            sequence_length=sequence_length,
             time_major=self.time_major,
             swap_memory=True)
       elif hparams.encoder_type == "bi":
@@ -723,7 +729,7 @@ class Model(BaseModel):
         encoder_outputs, bi_encoder_state = (
             self._build_bidirectional_rnn(
                 inputs=self.encoder_emb_inp,
-                sequence_length=iterator.source_sequence_length,
+                sequence_length=sequence_length,
                 dtype=dtype,
                 hparams=hparams,
                 num_bi_layers=num_bi_layers,
@@ -745,6 +751,11 @@ class Model(BaseModel):
     self.encoder_state_list = [encoder_outputs]
 
     return encoder_outputs, encoder_state
+
+  def _build_encoder(self, hparams):
+    """Build encoder from source."""
+    return self._build_encoder_from_sequence(
+        hparams, self.iterator.source, self.iterator.source_sequence_length)
 
   def _build_bidirectional_rnn(self, inputs, sequence_length,
                                dtype, hparams,
