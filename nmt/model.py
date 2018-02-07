@@ -112,7 +112,7 @@ class BaseModel(object):
     params = tf.trainable_variables()
 
     # Gradients and SGD update operation for training the model.
-    # Arrage for the embedding vars to appear at the beginning.
+    # Arrange for the embedding vars to appear at the beginning.
     if self.mode == tf.contrib.learn.ModeKeys.TRAIN:
       self.learning_rate = tf.constant(hparams.learning_rate)
       # warm-up
@@ -350,11 +350,12 @@ class BaseModel(object):
         attention_option is not (luong | scaled_luong |
         bahdanau | normed_bahdanau).
     """
-    utils.print_out("# creating %s graph ..." % self.mode)
+    utils.print_out("# Creating %s graph ..." % self.mode)
 
     with tf.variable_scope(scope or "dynamic_seq2seq", dtype=self.dtype):
       # Encoder
       if hparams.language_model:  # no encoder for language modeling
+        utils.print_out("  language modeling: no encoder")
         self.encoder_outputs = None
         encoder_state = None
       else:
@@ -572,7 +573,6 @@ class BaseModel(object):
     """
     pass
 
-
   def _softmax_cross_entropy_loss(
       self, logits, decoder_cell_outputs, labels):
     """Compute softmax loss or sampled softmax loss."""
@@ -591,7 +591,7 @@ class BaseModel(object):
           inputs=inputs,
           num_sampled=self.num_sampled_softmax,
           num_classes=self.tgt_vocab_size,
-          partition_strategy='div',
+          partition_strategy="div",
           seed=self.random_seed)
 
       if is_sequence:
@@ -605,7 +605,6 @@ class BaseModel(object):
           labels=labels, logits=logits)
 
     return crossent
-
 
   def _compute_loss(self, logits, decoder_cell_outputs):
     """Compute optimization loss."""
@@ -688,11 +687,16 @@ class Model(BaseModel):
     """Build an encoder from a sequence.
 
     Args:
+      hparams: hyperparameters.
       sequence: tensor with input sequence data.
       sequence_length: tensor with length of the input sequence.
+
     Returns:
       encoder_outputs: RNN encoder outputs.
       encoder_state: RNN encoder state.
+
+    Raises:
+      ValueError: if encoder_type is neither "uni" nor "bi".
     """
     num_layers = self.num_encoder_layers
     num_residual_layers = self.num_encoder_residual_layers
@@ -754,6 +758,7 @@ class Model(BaseModel):
 
   def _build_encoder(self, hparams):
     """Build encoder from source."""
+    utils.print_out("# Build a basic encoder")
     return self._build_encoder_from_sequence(
         hparams, self.iterator.source, self.iterator.source_sequence_length)
 

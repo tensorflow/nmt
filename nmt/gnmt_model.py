@@ -64,6 +64,7 @@ class GNMTModel(attention_model.AttentionModel):
     # Build GNMT encoder.
     num_bi_layers = 1
     num_uni_layers = self.num_encoder_layers - num_bi_layers
+    utils.print_out("# Build a GNMT encoder")
     utils.print_out("  num_bi_layers = %d" % num_bi_layers)
     utils.print_out("  num_uni_layers = %d" % num_uni_layers)
 
