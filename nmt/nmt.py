@@ -503,10 +503,16 @@ def extend_hparams(hparams):
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
 
     if tf.gfile.Exists(src_embed_file):
+      utils.print_out("  src_embed_file %s exist" % src_embed_file)
       hparams.src_embed_file = src_embed_file
+    else:
+      utils.print_out("  src_embed_file %s doesn't exist" % src_embed_file)
 
     if tf.gfile.Exists(tgt_embed_file):
       hparams.tgt_embed_file = tgt_embed_file
+      utils.print_out("  tgt_embed_file %s exist" % tgt_embed_file)
+    else:
+      utils.print_out("  tgt_embed_file %s doesn't exist" % tgt_embed_file)
 
   # Evaluation
   for metric in hparams.metrics:

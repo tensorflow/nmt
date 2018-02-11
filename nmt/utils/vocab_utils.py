@@ -91,12 +91,14 @@ def create_vocab_tables(src_vocab_file, tgt_vocab_file, share_vocab):
 def load_embed_txt(embed_file):
   """Load embed_file into a python dictionary.
 
-  Note: the embed_file should be a Glove formated txt file. Assuming
-  embed_size=5, for example:
+  Note: the embed_file should be a Glove/word2vec formated txt file. Assuming
+  Here is an exampe assuming embed_size=5:
 
   the -0.071549 0.093459 0.023738 -0.090339 0.056123
   to 0.57346 0.5417 -0.23477 -0.3624 0.4037
   and 0.20327 0.47348 0.050877 0.002103 0.060547
+
+  For word2vec format, the first line will be: <num_words> <emb_size>.
 
   Args:
     embed_file: file path to the embedding file.
@@ -105,14 +107,22 @@ def load_embed_txt(embed_file):
   """
   emb_dict = dict()
   emb_size = None
-  with codecs.getreader("utf-8")(tf.gfile.GFile(embed_file, 'rb')) as f:
+
+  is_first_line = True
+  with codecs.getreader("utf-8")(tf.gfile.GFile(embed_file, "rb")) as f:
     for line in f:
-      tokens = line.strip().split(" ")
+      tokens = line.rstrip().split(" ")
+      if is_first_line:
+        is_first_line = False
+        if len(tokens) == 2:  # header line
+          emb_size = int(tokens[1])
+          continue
       word = tokens[0]
       vec = list(map(float, tokens[1:]))
       emb_dict[word] = vec
       if emb_size:
-        assert emb_size == len(vec), "All embedding size should be same."
+        assert emb_size == len(vec), "All embedding size should be same %s." % (
+            line)
       else:
         emb_size = len(vec)
   return emb_dict, emb_size
