@@ -121,8 +121,10 @@ def load_embed_txt(embed_file):
       vec = list(map(float, tokens[1:]))
       emb_dict[word] = vec
       if emb_size:
-        assert emb_size == len(vec), "All embedding size should be same %s." % (
-            line)
+        if emb_size != len(vec):
+          utils.print_out(
+              "Ignoring %s since embeding size is inconsistent." % word)
+          del emb_dict[word]
       else:
         emb_size = len(vec)
   return emb_dict, emb_size

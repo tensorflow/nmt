@@ -290,7 +290,8 @@ def create_emb_for_encoder_and_decoder(share_vocab,
                                        src_embed_size,
                                        tgt_embed_size,
                                        dtype=tf.float32,
-                                       num_partitions=0,
+                                       num_enc_partitions=0,
+                                       num_dec_partitions=0,
                                        src_vocab_file=None,
                                        tgt_vocab_file=None,
                                        src_embed_file=None,
@@ -308,7 +309,10 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     tgt_embed_size: An integer. The embedding dimension for the decoder's
       embedding.
     dtype: dtype of the embedding matrix. Default to float32.
-    num_partitions: number of partitions used for the embedding vars.
+    num_enc_partitions: number of partitions used for the encoder's embedding
+      vars.
+    num_dec_partitions: number of partitions used for the decoder's embedding
+      vars.
     scope: VariableScope for the created subgraph. Default to "embedding".
 
   Returns:
@@ -319,22 +323,36 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     ValueError: if use share_vocab but source and target have different vocab
       size.
   """
-
-  if num_partitions <= 1:
-    partitioner = None
+  if num_enc_partitions <= 1:
+    enc_partitioner = None
   else:
     # Note: num_partitions > 1 is required for distributed training due to
     # embedding_lookup tries to colocate single partition-ed embedding variable
     # with lookup ops. This may cause embedding variables being placed on worker
     # jobs.
-    partitioner = tf.fixed_size_partitioner(num_partitions)
+    enc_partitioner = tf.fixed_size_partitioner(num_enc_partitions)
 
-  if (src_embed_file or tgt_embed_file) and partitioner:
+  if num_dec_partitions <= 1:
+    dec_partitioner = None
+  else:
+    # Note: num_partitions > 1 is required for distributed training due to
+    # embedding_lookup tries to colocate single partition-ed embedding variable
+    # with lookup ops. This may cause embedding variables being placed on worker
+    # jobs.
+    dec_partitioner = tf.fixed_size_partitioner(num_dec_partitions)
+
+  if src_embed_file and enc_partitioner:
     raise ValueError(
-        "Can't set num_partitions > 1 when using pretrained embedding")
+        "Can't set num_enc_partitions > 1 when using pretrained encoder "
+        "embedding")
+
+  if tgt_embed_file and dec_partitioner:
+    raise ValueError(
+        "Can't set num_dec_partitions > 1 when using pretrained decdoer "
+        "embedding")
 
   with tf.variable_scope(
-      scope or "embeddings", dtype=dtype, partitioner=partitioner) as scope:
+      scope or "embeddings", dtype=dtype, partitioner=enc_partitioner) as scope:
     # Share embedding
     if share_vocab:
       if src_vocab_size != tgt_vocab_size:
@@ -350,12 +368,12 @@ def create_emb_for_encoder_and_decoder(share_vocab,
           src_vocab_size, src_embed_size, dtype)
       embedding_decoder = embedding_encoder
     else:
-      with tf.variable_scope("encoder", partitioner=partitioner):
+      with tf.variable_scope("encoder", partitioner=enc_partitioner):
         embedding_encoder = _create_or_load_embed(
             "embedding_encoder", src_vocab_file, src_embed_file,
             src_vocab_size, src_embed_size, dtype)
 
-      with tf.variable_scope("decoder", partitioner=partitioner):
+      with tf.variable_scope("decoder", partitioner=dec_partitioner):
         embedding_decoder = _create_or_load_embed(
             "embedding_decoder", tgt_vocab_file, tgt_embed_file,
             tgt_vocab_size, tgt_embed_size, dtype)

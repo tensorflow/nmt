@@ -45,6 +45,8 @@ def create_standard_hparams():
       residual=False,
       time_major=True,
       num_embeddings_partitions=0,
+      num_enc_emb_partitions=0,
+      num_dec_emb_partitions=0,
 
       # Attention mechanisms
       attention="scaled_luong",

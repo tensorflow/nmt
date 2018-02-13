@@ -492,25 +492,34 @@ def extend_hparams(hparams):
   _add_argument(hparams, "src_vocab_file", src_vocab_file)
   _add_argument(hparams, "tgt_vocab_file", tgt_vocab_file)
 
+  # Num embedding partitions
+  _add_argument(hparams, "num_enc_emb_partitions", hparams.num_embeddings_partitions)
+  _add_argument(hparams, "num_dec_emb_partitions", hparams.num_embeddings_partitions)
+
   # Pretrained Embeddings
   _add_argument(hparams, "src_embed_file", "")
   _add_argument(hparams, "tgt_embed_file", "")
   if hparams.embed_prefix:
-    hparams.num_embeddings_partitions = 1
-    utils.print_out(
-        "For pretrained embeddings, set num_embeddings_partitions to 1")
     src_embed_file = hparams.embed_prefix + "." + hparams.src
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
 
     if tf.gfile.Exists(src_embed_file):
       utils.print_out("  src_embed_file %s exist" % src_embed_file)
       hparams.src_embed_file = src_embed_file
+
+      utils.print_out(
+          "For pretrained embeddings, set num_enc_emb_partitions to 1")
+      hparams.num_enc_emb_partitions = 1
     else:
       utils.print_out("  src_embed_file %s doesn't exist" % src_embed_file)
 
     if tf.gfile.Exists(tgt_embed_file):
-      hparams.tgt_embed_file = tgt_embed_file
       utils.print_out("  tgt_embed_file %s exist" % tgt_embed_file)
+      hparams.tgt_embed_file = tgt_embed_file
+
+      utils.print_out(
+          "For pretrained embeddings, set num_dec_emb_partitions to 1")
+      hparams.num_dec_emb_partitions = 1
     else:
       utils.print_out("  tgt_embed_file %s doesn't exist" % tgt_embed_file)
 

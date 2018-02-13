@@ -126,7 +126,8 @@ class GNMTModel(attention_model.AttentionModel):
                           source_sequence_length):
     """Build a RNN cell with GNMT attention architecture."""
     # Standard attention
-    if hparams.attention_architecture == "standard":
+    if (hparams.attention_architecture == "standard" or
+        hparams.attention_architecture == ""):
       return super(GNMTModel, self)._build_decoder_cell(
           hparams, encoder_outputs, encoder_state, source_sequence_length)
 
@@ -205,7 +206,8 @@ class GNMTModel(attention_model.AttentionModel):
 
   def _get_infer_summary(self, hparams):
     # Standard attention
-    if hparams.attention_architecture == "standard":
+    if (hparams.attention_architecture == "standard" or
+        hparams.attention_architecture == ""):
       return super(GNMTModel, self)._get_infer_summary(hparams)
 
     # GNMT attention
