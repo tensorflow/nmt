@@ -102,7 +102,7 @@ def maybe_parse_standard_hparams(hparams, hparams_path):
   """Override hparams values with existing standard hparams config."""
   if hparams_path and tf.gfile.Exists(hparams_path):
     print_out("# Loading standard hparams from %s" % hparams_path)
-    with tf.gfile.GFile(hparams_path, "r") as f:
+    with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_path, "rb")) as f:
       hparams.parse_json(f.read())
   return hparams
 
