@@ -491,7 +491,14 @@ class BaseModel(object):
         # We chose to apply the output_layer to all timesteps for speed:
         #   10% improvements for small models & 20% for larger ones.
         # If memory is a concern, we should apply output_layer per timestep.
-        logits = self.output_layer(outputs.rnn_output)
+        num_layers = self.num_decoder_layers
+        num_gpus = self.num_gpus
+        device_id = num_layers if num_layers < num_gpus else (num_layers - 1)
+        # Colocate output layer with the last RNN cell if there is no extra GPU
+        # avaliable. Otherwise, put last layer on a separate GPU.
+        with tf.device(model_helper.get_device_str(device_id, num_gpus)):
+          logits = self.output_layer(outputs.rnn_output)
+
         if self.num_sampled_softmax > 0:
           logits = tf.no_op()  # unused when using sampled softmax loss.
 
