@@ -80,6 +80,7 @@ def create_standard_hparams():
       sos="<s>",
       eos="</s>",
       subword_option="",
+      use_char_encode=False,
       check_special_token=True,
 
       # Misc

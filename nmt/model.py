@@ -20,11 +20,14 @@ from __future__ import print_function
 
 import abc
 import collections
+import numpy as np
+
 import tensorflow as tf
 
 from . import model_helper
 from .utils import iterator_utils
 from .utils import misc_utils as utils
+from .utils import vocab_utils
 
 utils.check_tensorflow_version()
 
@@ -177,6 +180,11 @@ class BaseModel(object):
     self.tgt_vocab_size = hparams.tgt_vocab_size
     self.num_gpus = hparams.num_gpus
     self.time_major = hparams.time_major
+
+    if hparams.use_char_encode:
+      assert (not self.time_major), ("Can't use time major for"
+                                     " char-level inputs.")
+
     self.dtype = tf.float32
     self.num_sampled_softmax = hparams.num_sampled_softmax
 
@@ -215,8 +223,11 @@ class BaseModel(object):
     tf.get_variable_scope().set_initializer(initializer)
 
     # Embeddings
+    if extra_args and extra_args.encoder_emb_lookup_fn:
+      self.encoder_emb_lookup_fn = extra_args.encoder_emb_lookup_fn
+    else:
+      self.encoder_emb_lookup_fn = tf.nn.embedding_lookup
     self.init_embeddings(hparams, scope)
-
 
   def _get_learning_rate_warmup(self, hparams):
     """Get learning rate warmup."""
@@ -299,6 +310,7 @@ class BaseModel(object):
             tgt_vocab_file=hparams.tgt_vocab_file,
             src_embed_file=hparams.src_embed_file,
             tgt_embed_file=hparams.tgt_embed_file,
+            use_char_encode=hparams.use_char_encode,
             scope=scope,))
 
   def _get_train_summary(self):
@@ -576,8 +588,8 @@ class BaseModel(object):
       source_sequence_length: sequence length of encoder_outputs.
 
     Returns:
-      A tuple of a multi-layer RNN cell used by decoder
-        and the intial state of the decoder RNN.
+      A tuple of a multi-layer RNN cell used by decoder and the intial state of
+      the decoder RNN.
     """
     pass
 
@@ -690,7 +702,6 @@ class Model(BaseModel):
   This class implements a multi-layer recurrent neural network as encoder,
   and a multi-layer recurrent neural network decoder.
   """
-
   def _build_encoder_from_sequence(self, hparams, sequence, sequence_length):
     """Build an encoder from a sequence.
 
@@ -714,9 +725,9 @@ class Model(BaseModel):
 
     with tf.variable_scope("encoder") as scope:
       dtype = scope.dtype
-      # Look up embedding, emp_inp: [max_time, batch_size, num_units]
-      self.encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
-                                                    sequence)
+
+      self.encoder_emb_inp = self.encoder_emb_lookup_fn(
+          self.embedding_encoder, sequence)
 
       # Encoder_outputs: [max_time, batch_size, num_units]
       if hparams.encoder_type == "uni":

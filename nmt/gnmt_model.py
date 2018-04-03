@@ -20,12 +20,10 @@ from __future__ import print_function
 
 import tensorflow as tf
 
-# TODO(rzhao): Use tf.contrib.framework.nest once 1.3 is out.
-from tensorflow.python.util import nest
-
 from . import attention_model
 from . import model_helper
 from .utils import misc_utils as utils
+from .utils import vocab_utils
 
 __all__ = ["GNMTModel"]
 
@@ -76,10 +74,8 @@ class GNMTModel(attention_model.AttentionModel):
     with tf.variable_scope("encoder") as scope:
       dtype = scope.dtype
 
-      # Look up embedding, emp_inp: [max_time, batch_size, num_units]
-      #   when time_major = True
-      self.encoder_emb_inp = tf.nn.embedding_lookup(self.embedding_encoder,
-                                                    source)
+      self.encoder_emb_inp = self.encoder_emb_lookup_fn(
+          self.embedding_encoder, source)
 
       # Execute _build_bidirectional_rnn from Model class
       bi_encoder_outputs, bi_encoder_state = self._build_bidirectional_rnn(
@@ -235,7 +231,7 @@ class GNMTAttentionMultiCell(tf.nn.rnn_cell.MultiRNNCell):
 
   def __call__(self, inputs, state, scope=None):
     """Run the cell with bottom layer's attention copied to all upper layers."""
-    if not nest.is_sequence(state):
+    if not tf.contrib.framework.nest.is_sequence(state):
       raise ValueError(
           "Expected state to be a tuple of length %d, but received: %s"
           % (len(self.state_size), state))
@@ -281,9 +277,12 @@ def gnmt_residual_fn(inputs, outputs):
     out_dim = out.get_shape().as_list()[-1]
     inp_dim = inp.get_shape().as_list()[-1]
     return tf.split(inp, [out_dim, inp_dim - out_dim], axis=-1)
-  actual_inputs, _ = nest.map_structure(split_input, inputs, outputs)
+  actual_inputs, _ = tf.contrib.framework.nest.map_structure(
+      split_input, inputs, outputs)
   def assert_shape_match(inp, out):
     inp.get_shape().assert_is_compatible_with(out.get_shape())
-  nest.assert_same_structure(actual_inputs, outputs)
-  nest.map_structure(assert_shape_match, actual_inputs, outputs)
-  return nest.map_structure(lambda inp, out: inp + out, actual_inputs, outputs)
+  tf.contrib.framework.nest.assert_same_structure(actual_inputs, outputs)
+  tf.contrib.framework.nest.map_structure(
+      assert_shape_match, actual_inputs, outputs)
+  return tf.contrib.framework.nest.map_structure(
+      lambda inp, out: inp + out, actual_inputs, outputs)

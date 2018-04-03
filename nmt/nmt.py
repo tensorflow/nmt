@@ -213,6 +213,14 @@ def add_arguments(parser):
                       Set to bpe or spm to activate subword desegmentation.\
                       """)
 
+  # Experimental encoding feature.
+  parser.add_argument("--use_char_encode", type="bool", default=False,
+                      help="""\
+                      Whether to split each word or bpe into character, and then
+                      generate the word-level representation from the character
+                      reprentation.
+                      """)
+
   # Misc
   parser.add_argument("--num_gpus", type=int, default=1,
                       help="Number of gpus in each worker.")
@@ -366,6 +374,7 @@ def create_hparams(flags):
       eos=flags.eos if flags.eos else vocab_utils.EOS,
       subword_option=flags.subword_option,
       check_special_token=flags.check_special_token,
+      use_char_encode=flags.use_char_encode,
 
       # Misc
       forget_bias=flags.forget_bias,
@@ -493,8 +502,10 @@ def extend_hparams(hparams):
   _add_argument(hparams, "tgt_vocab_file", tgt_vocab_file)
 
   # Num embedding partitions
-  _add_argument(hparams, "num_enc_emb_partitions", hparams.num_embeddings_partitions)
-  _add_argument(hparams, "num_dec_emb_partitions", hparams.num_embeddings_partitions)
+  _add_argument(
+      hparams, "num_enc_emb_partitions", hparams.num_embeddings_partitions)
+  _add_argument(
+      hparams, "num_dec_emb_partitions", hparams.num_embeddings_partitions)
 
   # Pretrained Embeddings
   _add_argument(hparams, "src_embed_file", "")
