@@ -131,7 +131,10 @@ def single_worker_inference(infer_model,
   infer_data = load_data(inference_input_file, hparams)
 
   with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+      graph=infer_model.graph, config=utils.get_config_proto(
+        num_intra_threads=hparams.num_intra_threads,
+        num_inter_threads=hparams.num_inter_threads
+        )) as sess:
     loaded_infer_model = model_helper.load_model(
         infer_model.model, ckpt, sess, "infer")
     sess.run(
@@ -190,7 +193,10 @@ def multi_worker_inference(infer_model,
   infer_data = infer_data[start_position:end_position]
 
   with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+      graph=infer_model.graph, config=utils.get_config_proto(
+        num_intra_threads=hparams.num_intra_threads,
+        num_inter_threads=hparams.num_inter_threads
+      )) as sess:
     loaded_infer_model = model_helper.load_model(
         infer_model.model, ckpt, sess, "infer")
     sess.run(infer_model.iterator.initializer,
