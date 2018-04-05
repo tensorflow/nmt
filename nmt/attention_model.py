@@ -63,10 +63,6 @@ class AttentionModel(model.Model):
         scope=scope,
         extra_args=extra_args)
 
-    if self.mode == tf.contrib.learn.ModeKeys.INFER:
-      self.infer_summary = self._get_infer_summary(hparams)
-
-
   def _prepare_beam_search_decoder_inputs(
       self, beam_width, memory, source_sequence_length, encoder_state):
     memory = tf.contrib.seq2seq.tile_batch(
@@ -77,7 +73,6 @@ class AttentionModel(model.Model):
         encoder_state, multiplier=beam_width)
     batch_size = self.batch_size * beam_width
     return memory, source_sequence_length, encoder_state, batch_size
-
 
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
                           source_sequence_length):

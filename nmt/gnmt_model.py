@@ -41,6 +41,9 @@ class GNMTModel(attention_model.AttentionModel):
                reverse_target_vocab_table=None,
                scope=None,
                extra_args=None):
+    self.is_gnmt_attention = (
+        hparams.attention_architecture in ["gnmt", "gnmt_v2"])
+
     super(GNMTModel, self).__init__(
         hparams=hparams,
         mode=mode,
@@ -87,43 +90,88 @@ class GNMTModel(attention_model.AttentionModel):
           num_bi_residual_layers=0,  # no residual connection
       )
 
-      uni_cell = model_helper.create_rnn_cell(
-          unit_type=hparams.unit_type,
-          num_units=hparams.num_units,
-          num_layers=num_uni_layers,
-          num_residual_layers=self.num_encoder_residual_layers,
-          forget_bias=hparams.forget_bias,
-          dropout=hparams.dropout,
-          num_gpus=self.num_gpus,
-          base_gpu=1,
-          mode=self.mode,
-          single_cell_fn=self.single_cell_fn)
+      # Build unidirectional layers
+      if self.extract_encoder_layers:
+        encoder_state, encoder_outputs = self._build_individual_encoder_layers(
+            bi_encoder_outputs, num_uni_layers, dtype, hparams)
+      else:
+        encoder_state, encoder_outputs = self._build_all_encoder_layers(
+            bi_encoder_outputs, num_uni_layers, dtype, hparams)
 
-      # encoder_outputs: size [max_time, batch_size, num_units]
-      #   when time_major = True
-      encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
-          uni_cell,
-          bi_encoder_outputs,
-          dtype=dtype,
-          sequence_length=iterator.source_sequence_length,
-          time_major=self.time_major)
-
-      # Pass all encoder state except the first bi-directional layer's state to
-      # decoder.
+      # Pass all encoder states to the decoder
+      #   except the first bi-directional layer
       encoder_state = (bi_encoder_state[1],) + (
           (encoder_state,) if num_uni_layers == 1 else encoder_state)
+
+    return encoder_outputs, encoder_state
+
+  def _build_all_encoder_layers(self, bi_encoder_outputs,
+                                num_uni_layers, dtype, hparams):
+    """Build encoder layers all at once."""
+    uni_cell = model_helper.create_rnn_cell(
+        unit_type=hparams.unit_type,
+        num_units=hparams.num_units,
+        num_layers=num_uni_layers,
+        num_residual_layers=self.num_encoder_residual_layers,
+        forget_bias=hparams.forget_bias,
+        dropout=hparams.dropout,
+        num_gpus=self.num_gpus,
+        base_gpu=1,
+        mode=self.mode,
+        single_cell_fn=self.single_cell_fn)
+    encoder_outputs, encoder_state = tf.nn.dynamic_rnn(
+        uni_cell,
+        bi_encoder_outputs,
+        dtype=dtype,
+        sequence_length=self.iterator.source_sequence_length,
+        time_major=self.time_major)
 
     # Use the top layer for now
     self.encoder_state_list = [encoder_outputs]
 
-    return encoder_outputs, encoder_state
+    return encoder_state, encoder_outputs
+
+  def _build_individual_encoder_layers(self, bi_encoder_outputs,
+                                       num_uni_layers, dtype, hparams):
+    """Run each of the encoder layer separately, not used in general seq2seq."""
+    uni_cell_lists = model_helper._cell_list(
+        unit_type=hparams.unit_type,
+        num_units=hparams.num_units,
+        num_layers=num_uni_layers,
+        num_residual_layers=self.num_encoder_residual_layers,
+        forget_bias=hparams.forget_bias,
+        dropout=hparams.dropout,
+        num_gpus=self.num_gpus,
+        base_gpu=1,
+        mode=self.mode,
+        single_cell_fn=self.single_cell_fn)
+
+    encoder_inp = bi_encoder_outputs
+    encoder_states = []
+    self.encoder_state_list = [bi_encoder_outputs[:, :, :hparams.num_units],
+                               bi_encoder_outputs[:, :, hparams.num_units:]]
+    with tf.variable_scope("rnn/multi_rnn_cell"):
+      for i, cell in enumerate(uni_cell_lists):
+        with tf.variable_scope("cell_%d" % i) as scope:
+          encoder_inp, encoder_state = tf.nn.dynamic_rnn(
+              cell,
+              encoder_inp,
+              dtype=dtype,
+              sequence_length=self.iterator.source_sequence_length,
+              time_major=self.time_major,
+              scope=scope)
+          encoder_states.append(encoder_state)
+          self.encoder_state_list.append(encoder_inp)
+
+    encoder_state = tuple(encoder_states)
+    encoder_outputs = self.encoder_state_list[-1]
+    return encoder_state, encoder_outputs
 
   def _build_decoder_cell(self, hparams, encoder_outputs, encoder_state,
                           source_sequence_length):
     """Build a RNN cell with GNMT attention architecture."""
     # Standard attention
-    if (hparams.attention_architecture == "standard" or
-        hparams.attention_architecture == ""):
+    if not self.is_gnmt_attention:
       return super(GNMTModel, self)._build_decoder_cell(
           hparams, encoder_outputs, encoder_state, source_sequence_length)
 
@@ -201,16 +249,13 @@ class GNMTModel(attention_model.AttentionModel):
     return cell, decoder_initial_state
 
   def _get_infer_summary(self, hparams):
-    # Standard attention
-    if (hparams.attention_architecture == "standard" or
-        hparams.attention_architecture == ""):
-      return super(GNMTModel, self)._get_infer_summary(hparams)
-
-    # GNMT attention
     if hparams.infer_mode == "beam_search":
       return tf.no_op()
-    return attention_model._create_attention_images_summary(
-        self.final_context_state[0])
+    elif self.is_gnmt_attention:
+      return attention_model._create_attention_images_summary(
+          self.final_context_state[0])
+    else:
+      return super(GNMTModel, self)._get_infer_summary(hparams)
 
 
 class GNMTAttentionMultiCell(tf.nn.rnn_cell.MultiRNNCell):
