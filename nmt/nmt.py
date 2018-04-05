@@ -321,7 +321,6 @@ def create_hparams(flags):
 
       # Networks
       num_units=flags.num_units,
-      num_layers=flags.num_layers,  # Compatible
       num_encoder_layers=(flags.num_encoder_layers or flags.num_layers),
       num_decoder_layers=(flags.num_decoder_layers or flags.num_layers),
       dropout=flags.dropout,
@@ -555,10 +554,11 @@ def ensure_compatible_hparams(hparams, default_hparams, hparams_path):
   default_hparams = utils.maybe_parse_standard_hparams(
       default_hparams, hparams_path)
   # Set num encoder/decoder layers (for old checkpoints)
-  if not hasattr(hparams, "num_encoder_layers"):
-    hparams.add_hparam("num_encoder_layers", hparams.num_layers)
-  if not hasattr(hparams, "num_decoder_layers"):
-    hparams.add_hparam("num_decoder_layers", hparams.num_layers)
+  if hasattr(hparams, "num_layers"):
+    if not hasattr(hparams, "num_encoder_layers"):
+      hparams.add_hparam("num_encoder_layers", hparams.num_layers)
+    if not hasattr(hparams, "num_decoder_layers"):
+      hparams.add_hparam("num_decoder_layers", hparams.num_layers)
 
   # For compatible reason, if there are new fields in default_hparams,
   #   we add them to the current hparams

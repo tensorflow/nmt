@@ -36,7 +36,6 @@ def create_standard_hparams():
 
       # Networks
       num_units=512,
-      num_layers=2,
       num_encoder_layers=2,
       num_decoder_layers=2,
       dropout=0.2,
