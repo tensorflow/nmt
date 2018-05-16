@@ -199,7 +199,8 @@ def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
 def init_stats():
   """Initialize statistics that we want to accumulate."""
   return {"step_time": 0.0, "loss": 0.0, "predict_count": 0.0,
-          "total_count": 0.0, "grad_norm": 0.0}
+          "total_count": 0.0, "grad_norm": 0.0,
+          "checkpoint_total_samples": 0.0}
 
 
 def update_stats(stats, start_time, step_result):
@@ -213,6 +214,7 @@ def update_stats(stats, start_time, step_result):
   stats["predict_count"] += step_predict_count
   stats["total_count"] += float(step_word_count)
   stats["grad_norm"] += grad_norm
+  stats["checkpoint_total_samples"] += float(batch_size)
 
   return global_step, learning_rate, step_summary
 
@@ -220,9 +222,9 @@ def update_stats(stats, start_time, step_result):
 def print_step_info(prefix, global_step, info, result_summary, log_f):
   """Print all info at the current global step."""
   utils.print_out(
-      "%sstep %d lr %g step-time %.2fs wps %.2fK ppl %.2f gN %.2f %s, %s" %
+      "%sstep %d lr %g step-time %.2fs wps %.2fK sps %5.2f ppl %.2f gN %.2f %s, %s" %
       (prefix, global_step, info["learning_rate"], info["avg_step_time"],
-       info["speed"], info["train_ppl"], info["avg_grad_norm"], result_summary,
+       info["speed"], info["speed_samples"], info["train_ppl"], info["avg_grad_norm"], result_summary,
        time.ctime()),
       log_f)
 
@@ -234,6 +236,7 @@ def process_stats(stats, info, global_step, steps_per_stats, log_f):
   info["avg_grad_norm"] = stats["grad_norm"] / steps_per_stats
   info["train_ppl"] = utils.safe_exp(stats["loss"] / stats["predict_count"])
   info["speed"] = stats["total_count"] / (1000 * stats["step_time"])
+  info["speed_samples"] = stats["checkpoint_total_samples"] / stats["step_time"]
 
   # Check for overflow
   is_overflow = False
@@ -253,7 +256,7 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
   info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
           "avg_grad_norm": 0.0,
           "learning_rate": loaded_train_model.learning_rate.eval(
-              session=train_sess)}
+              session=train_sess), "speed_samples": 0.0}
   start_train_time = time.time()
   utils.print_out("# Start step %d, lr %g, %s" %
                   (global_step, info["learning_rate"], time.ctime()), log_f)
