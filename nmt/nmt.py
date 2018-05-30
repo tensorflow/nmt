@@ -287,6 +287,22 @@ def add_arguments(parser):
                       help="number of intra_op_parallelism_threads")
 
 
+def add_export_arguments(parser):
+  parser.add_argument("--export_path", type=str, default=None,
+                      help="Folder to save exported model."
+                           "If None, use out_dir in loaded hparams instead.")
+  parser.add_argument("--ckpt_path", type=str, default=None,
+                      help="Checkpoint path for restoration."
+                           "If None, use out_dir in loaded hparams instead.")
+  parser.add_argument("--infer_file", type=str, default=None,
+                      help="A file used for initializing iterator."
+                           "Test, dev or inference src file is suggested."
+                           "If None, use test file form loaded hparams instead.")
+  parser.add_argument("--version_number", type=str, default=None,
+                      help="Version of exported model. "
+                           "If None, use time in milliseconds instead.")
+
+
 def create_hparams(flags):
   """Create training hparams."""
   return tf.contrib.training.HParams(
@@ -586,6 +602,11 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
             metric,
             hparams.subword_option)
         utils.print_out("  %s: %.1f" % (metric, score))
+  elif flags.export_path:
+    # Export
+    from .exporter import Exporter
+    exporter = Exporter(hparams=hparams, flags=flags)
+    exporter.export()
   else:
     # Train
     train_fn(hparams, target_session=target_session)
@@ -601,5 +622,6 @@ def main(unused_argv):
 if __name__ == "__main__":
   nmt_parser = argparse.ArgumentParser()
   add_arguments(nmt_parser)
+  add_export_arguments(nmt_parser)
   FLAGS, unparsed = nmt_parser.parse_known_args()
   tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
