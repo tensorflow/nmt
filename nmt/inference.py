@@ -234,7 +234,7 @@ def multi_worker_inference(infer_model,
       for worker_id in range(num_workers):
         worker_infer_done = "%s_done_%d" % (inference_output_file, worker_id)
         while not tf.gfile.Exists(worker_infer_done):
-          utils.print_out("  waitting job %d to complete." % worker_id)
+          utils.print_out("  waiting job %d to complete." % worker_id)
           time.sleep(10)
 
         with codecs.getreader("utf-8")(
