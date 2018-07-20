@@ -91,8 +91,8 @@ def create_train_model(
     src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
         src_vocab_file, tgt_vocab_file, hparams.share_vocab)
 
-    src_dataset = tf.data.TextLineDataset(src_file)
-    tgt_dataset = tf.data.TextLineDataset(tgt_file)
+    src_dataset = tf.data.TextLineDataset(tf.gfile.Glob(src_file))
+    tgt_dataset = tf.data.TextLineDataset(tf.gfile.Glob(tgt_file))
     skip_count_placeholder = tf.placeholder(shape=(), dtype=tf.int64)
 
     iterator = iterator_utils.get_iterator(
