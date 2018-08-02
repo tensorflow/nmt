@@ -95,6 +95,16 @@ def get_model_creator(hparams):
   return model_creator
 
 
+def start_sess_and_load_model(infer_model, ckpt_path):
+  """Start session and load model."""
+  sess = tf.Session(
+      graph=infer_model.graph, config=utils.get_config_proto())
+  with infer_model.graph.as_default():
+    loaded_infer_model = model_helper.load_model(
+        infer_model.model, ckpt_path, sess, "infer")
+  return sess, loaded_infer_model
+
+
 def inference(ckpt_path,
               inference_input_file,
               inference_output_file,
@@ -108,27 +118,32 @@ def inference(ckpt_path,
 
   model_creator = get_model_creator(hparams)
   infer_model = model_helper.create_infer_model(model_creator, hparams, scope)
+  sess, loaded_infer_model = start_sess_and_load_model(infer_model, ckpt_path)
 
   if num_workers == 1:
     single_worker_inference(
+        sess,
         infer_model,
-        ckpt_path,
+        loaded_infer_model,
         inference_input_file,
         inference_output_file,
         hparams)
   else:
     multi_worker_inference(
+        sess,
         infer_model,
-        ckpt_path,
+        loaded_infer_model,
         inference_input_file,
         inference_output_file,
         hparams,
         num_workers=num_workers,
         jobid=jobid)
+  sess.close()
 
 
-def single_worker_inference(infer_model,
-                            ckpt_path,
+def single_worker_inference(sess,
+                            infer_model,
+                            loaded_infer_model,
                             inference_input_file,
                             inference_output_file,
                             hparams):
@@ -138,10 +153,7 @@ def single_worker_inference(infer_model,
   # Read data
   infer_data = load_data(inference_input_file, hparams)
 
-  with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
-    loaded_infer_model = model_helper.load_model(
-        infer_model.model, ckpt_path, sess, "infer")
+  with infer_model.graph.as_default():
     sess.run(
         infer_model.iterator.initializer,
         feed_dict={
@@ -174,8 +186,9 @@ def single_worker_inference(infer_model,
           infer_mode=hparams.infer_mode)
 
 
-def multi_worker_inference(infer_model,
-                           ckpt_path,
+def multi_worker_inference(sess,
+                           infer_model,
+                           loaded_infer_model,
                            inference_input_file,
                            inference_output_file,
                            hparams,
@@ -198,10 +211,7 @@ def multi_worker_inference(infer_model,
   end_position = min(start_position + load_per_worker, total_load)
   infer_data = infer_data[start_position:end_position]
 
-  with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
-    loaded_infer_model = model_helper.load_model(
-        infer_model.model, ckpt_path, sess, "infer")
+  with infer_model.graph.as_default():
     sess.run(infer_model.iterator.initializer,
              {
                  infer_model.src_placeholder: infer_data,
