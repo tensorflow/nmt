@@ -23,6 +23,7 @@ import math
 import os
 import sys
 import time
+from distutils import version
 
 import numpy as np
 import tensorflow as tf
@@ -30,7 +31,8 @@ import tensorflow as tf
 
 def check_tensorflow_version():
   min_tf_version = "1.4.0-dev20171024"
-  if tf.__version__ < min_tf_version:
+  if (version.LooseVersion(tf.__version__) <
+      version.LooseVersion(min_tf_version)):
     raise EnvironmentError("Tensorflow version must >= %s" % min_tf_version)
 
 
