@@ -42,7 +42,7 @@ def decode_and_evaluate(name,
   """Decode a test set and compute a score according to the evaluation task."""
   # Decode
   if decode:
-    utils.print_out("  decoding to output %s." % trans_file)
+    utils.print_out("  decoding to output %s" % trans_file)
 
     start_time = time.time()
     num_sentences = 0
@@ -58,7 +58,7 @@ def decode_and_evaluate(name,
       while True:
         try:
           nmt_outputs, _ = model.decode(sess)
-          if infer_mode != "beam_search" :
+          if infer_mode != "beam_search":
             nmt_outputs = np.expand_dims(nmt_outputs, 0)
 
           batch_size = nmt_outputs.shape[1]

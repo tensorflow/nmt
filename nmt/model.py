@@ -521,7 +521,7 @@ class BaseModel(object):
         num_gpus = self.num_gpus
         device_id = num_layers if num_layers < num_gpus else (num_layers - 1)
         # Colocate output layer with the last RNN cell if there is no extra GPU
-        # avaliable. Otherwise, put last layer on a separate GPU.
+        # available. Otherwise, put last layer on a separate GPU.
         with tf.device(model_helper.get_device_str(device_id, num_gpus)):
           logits = self.output_layer(outputs.rnn_output)
 
@@ -533,6 +533,10 @@ class BaseModel(object):
         infer_mode = hparams.infer_mode
         start_tokens = tf.fill([self.batch_size], tgt_sos_id)
         end_token = tgt_eos_id
+        utils.print_out(
+            "  decoder: infer_mode=%sbeam_width=%d, length_penalty=%f" % (
+                infer_mode, hparams.beam_width, hparams.length_penalty_weight))
+
         if infer_mode == "beam_search":
           beam_width = hparams.beam_width
           length_penalty_weight = hparams.length_penalty_weight

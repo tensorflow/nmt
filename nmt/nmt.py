@@ -549,10 +549,11 @@ def extend_hparams(hparams):
   return hparams
 
 
-def ensure_compatible_hparams(hparams, default_hparams, hparams_path):
+def ensure_compatible_hparams(hparams, default_hparams, hparams_path=""):
   """Make sure the loaded hparams is compatible with new changes."""
   default_hparams = utils.maybe_parse_standard_hparams(
       default_hparams, hparams_path)
+
   # Set num encoder/decoder layers (for old checkpoints)
   if hasattr(hparams, "num_layers"):
     if not hasattr(hparams, "num_encoder_layers"):
