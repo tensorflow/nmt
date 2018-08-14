@@ -129,15 +129,30 @@ def single_worker_inference(infer_model,
 
   # Read data
   infer_data = load_data(inference_input_file, hparams)
+  infer_data_feed = infer_data
+
+  #sort the input file if no hparams.inference_indices is defined
+  index_pair = {}
+  new_input =[]
+  if hparams.inference_indices is None:
+    input_length = [(len(line.split()), i) for i, line in enumerate(infer_data)]
+    sorted_input_bylens = sorted(input_length)
+    for ni, (_, oi) in enumerate(sorted_input_bylens):
+      new_input.append(infer_data[oi])
+      index_pair[oi] = ni
+    infer_data_feed = new_input
 
   with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+      graph=infer_model.graph, config=utils.get_config_proto(
+        num_intra_threads=hparams.num_intra_threads,
+        num_inter_threads=hparams.num_inter_threads
+        )) as sess:
     loaded_infer_model = model_helper.load_model(
         infer_model.model, ckpt, sess, "infer")
     sess.run(
         infer_model.iterator.initializer,
         feed_dict={
-            infer_model.src_placeholder: infer_data,
+            infer_model.src_placeholder: infer_data_feed,
             infer_model.batch_size_placeholder: hparams.infer_batch_size
         })
     # Decode
@@ -162,7 +177,8 @@ def single_worker_inference(infer_model,
           subword_option=hparams.subword_option,
           beam_width=hparams.beam_width,
           tgt_eos=hparams.eos,
-          num_translations_per_input=hparams.num_translations_per_input)
+          num_translations_per_input=hparams.num_translations_per_input,
+          index_pair=index_pair)
 
 
 def multi_worker_inference(infer_model,
@@ -190,7 +206,10 @@ def multi_worker_inference(infer_model,
   infer_data = infer_data[start_position:end_position]
 
   with tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto()) as sess:
+      graph=infer_model.graph, config=utils.get_config_proto(
+        num_intra_threads=hparams.num_intra_threads,
+        num_inter_threads=hparams.num_inter_threads
+      )) as sess:
     loaded_infer_model = model_helper.load_model(
         infer_model.model, ckpt, sess, "infer")
     sess.run(infer_model.iterator.initializer,
