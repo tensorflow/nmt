@@ -35,6 +35,11 @@ utils.check_tensorflow_version()
 
 FLAGS = None
 
+INFERENCE_KEYS = ["src_max_len_infer", "tgt_max_len_infer", "subword_option",
+                  "infer_batch_size", "beam_width",
+                  "length_penalty_weight", "sampling_temperature",
+                  "num_translations_per_input", "infer_mode"]
+
 
 def add_arguments(parser):
   """Build ArgumentParser."""
@@ -456,7 +461,7 @@ def extend_hparams(hparams):
                 num_decoder_residual_layers)
 
   # Language modeling
-  if hparams.language_model:
+  if getattr(hparams, "language_model", None):
     hparams.attention = ""
     hparams.attention_architecture = ""
     hparams.pass_hidden_state = False
@@ -474,10 +479,11 @@ def extend_hparams(hparams):
     raise ValueError("hparams.vocab_prefix must be provided.")
 
   # Source vocab
+  check_special_token = getattr(hparams, "check_special_token", True)
   src_vocab_size, src_vocab_file = vocab_utils.check_vocab(
       src_vocab_file,
       hparams.out_dir,
-      check_special_token=hparams.check_special_token,
+      check_special_token=check_special_token,
       sos=hparams.sos,
       eos=hparams.eos,
       unk=vocab_utils.UNK)
@@ -491,7 +497,7 @@ def extend_hparams(hparams):
     tgt_vocab_size, tgt_vocab_file = vocab_utils.check_vocab(
         tgt_vocab_file,
         hparams.out_dir,
-        check_special_token=hparams.check_special_token,
+        check_special_token=check_special_token,
         sos=hparams.sos,
         eos=hparams.eos,
         unk=vocab_utils.UNK)
@@ -501,15 +507,14 @@ def extend_hparams(hparams):
   _add_argument(hparams, "tgt_vocab_file", tgt_vocab_file)
 
   # Num embedding partitions
-  _add_argument(
-      hparams, "num_enc_emb_partitions", hparams.num_embeddings_partitions)
-  _add_argument(
-      hparams, "num_dec_emb_partitions", hparams.num_embeddings_partitions)
+  num_embeddings_partitions = getattr(hparams, "num_embeddings_partitions", 0)
+  _add_argument(hparams, "num_enc_emb_partitions", num_embeddings_partitions)
+  _add_argument(hparams, "num_dec_emb_partitions", num_embeddings_partitions)
 
   # Pretrained Embeddings
   _add_argument(hparams, "src_embed_file", "")
   _add_argument(hparams, "tgt_embed_file", "")
-  if hparams.embed_prefix:
+  if getattr(hparams, "embed_prefix", None):
     src_embed_file = hparams.embed_prefix + "." + hparams.src
     tgt_embed_file = hparams.embed_prefix + "." + hparams.tgt
 
@@ -540,7 +545,7 @@ def extend_hparams(hparams):
     _add_argument(hparams, "best_" + metric, 0, update=False)
     _add_argument(hparams, "best_" + metric + "_dir", best_metric_dir)
 
-    if hparams.avg_ckpts:
+    if getattr(hparams, "avg_ckpts", None):
       best_metric_dir = os.path.join(hparams.out_dir, "avg_best_" + metric)
       tf.gfile.MakeDirs(best_metric_dir)
       _add_argument(hparams, "avg_best_" + metric, 0, update=False)
@@ -570,13 +575,12 @@ def ensure_compatible_hparams(hparams, default_hparams, hparams_path=""):
       hparams.add_hparam(key, default_config[key])
 
   # Update all hparams' keys if override_loaded_hparams=True
-  if default_hparams.override_loaded_hparams:
+  if getattr(default_hparams, "override_loaded_hparams", None):
     overwritten_keys = default_config.keys()
   else:
     # For inference
-    overwritten_keys = ["infer_batch_size", "beam_width",
-                        "length_penalty_weight", "sampling_temperature",
-                        "num_translations_per_input", "infer_mode"]
+    overwritten_keys = INFERENCE_KEYS
+
   for key in overwritten_keys:
     if getattr(hparams, key) != default_config[key]:
       utils.print_out("# Updating hparams.%s: %s -> %s" %
