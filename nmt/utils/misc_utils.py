@@ -63,9 +63,9 @@ def print_out(s, f=None, new_line=True):
       f.write(b"\n")
 
   # stdout
-  out_s = s.encode("utf-8")
+  out_s = s.encode(sys.stdout.encoding, "backslashreplace")
   if not isinstance(out_s, str):
-    out_s = out_s.decode("utf-8")
+    out_s = out_s.decode(sys.stdout.encoding, "backslashreplace")
   print(out_s, end="", file=sys.stdout)
 
   if new_line:
