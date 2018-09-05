@@ -23,6 +23,7 @@ import math
 import os
 import sys
 import time
+from distutils import version
 
 import numpy as np
 import tensorflow as tf
@@ -30,7 +31,8 @@ import tensorflow as tf
 
 def check_tensorflow_version():
   min_tf_version = "1.4.0-dev20171024"
-  if tf.__version__ < min_tf_version:
+  if (version.LooseVersion(tf.__version__) <
+      version.LooseVersion(min_tf_version)):
     raise EnvironmentError("Tensorflow version must >= %s" % min_tf_version)
 
 
@@ -100,14 +102,10 @@ def load_hparams(model_dir):
 
 def maybe_parse_standard_hparams(hparams, hparams_path):
   """Override hparams values with existing standard hparams config."""
-  if not hparams_path:
-    return hparams
-
-  if tf.gfile.Exists(hparams_path):
+  if hparams_path and tf.gfile.Exists(hparams_path):
     print_out("# Loading standard hparams from %s" % hparams_path)
-    with tf.gfile.GFile(hparams_path, "r") as f:
+    with codecs.getreader("utf-8")(tf.gfile.GFile(hparams_path, "rb")) as f:
       hparams.parse_json(f.read())
-
   return hparams
 
 
@@ -116,7 +114,7 @@ def save_hparams(out_dir, hparams):
   hparams_file = os.path.join(out_dir, "hparams")
   print_out("  saving hparams to %s" % hparams_file)
   with codecs.getwriter("utf-8")(tf.gfile.GFile(hparams_file, "wb")) as f:
-    f.write(hparams.to_json())
+    f.write(hparams.to_json(indent=4, sort_keys=True))
 
 
 def debug_tensor(s, msg=None, summarize=10):

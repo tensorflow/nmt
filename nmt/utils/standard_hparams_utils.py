@@ -36,7 +36,6 @@ def create_standard_hparams():
 
       # Networks
       num_units=512,
-      num_layers=2,
       num_encoder_layers=2,
       num_decoder_layers=2,
       dropout=0.2,
@@ -45,6 +44,8 @@ def create_standard_hparams():
       residual=False,
       time_major=True,
       num_embeddings_partitions=0,
+      num_enc_emb_partitions=0,
+      num_dec_emb_partitions=0,
 
       # Attention mechanisms
       attention="scaled_luong",
@@ -64,6 +65,7 @@ def create_standard_hparams():
       decay_scheme="luong234",
       colocate_gradients_with_ops=True,
       num_train_steps=12000,
+      num_sampled_softmax=0,
 
       # Data constraints
       num_buckets=5,
@@ -77,6 +79,7 @@ def create_standard_hparams():
       sos="<s>",
       eos="</s>",
       subword_option="",
+      use_char_encode=False,
       check_special_token=True,
 
       # Misc
@@ -101,4 +104,8 @@ def create_standard_hparams():
       infer_batch_size=32,
       sampling_temperature=0.0,
       num_translations_per_input=1,
+      infer_mode="greedy",
+
+      # Language model
+      language_model=False,
   )

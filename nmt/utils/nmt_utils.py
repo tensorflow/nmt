@@ -37,11 +37,12 @@ def decode_and_evaluate(name,
                         beam_width,
                         tgt_eos,
                         num_translations_per_input=1,
-                        decode=True):
+                        decode=True,
+                        infer_mode="greedy"):
   """Decode a test set and compute a score according to the evaluation task."""
   # Decode
   if decode:
-    utils.print_out("  decoding to output %s." % trans_file)
+    utils.print_out("  decoding to output %s" % trans_file)
 
     start_time = time.time()
     num_sentences = 0
@@ -49,12 +50,15 @@ def decode_and_evaluate(name,
         tf.gfile.GFile(trans_file, mode="wb")) as trans_f:
       trans_f.write("")  # Write empty string to ensure file is created.
 
-      num_translations_per_input = max(
-          min(num_translations_per_input, beam_width), 1)
+      if infer_mode == "greedy":
+        num_translations_per_input = 1
+      elif infer_mode == "beam_search":
+        num_translations_per_input = min(num_translations_per_input, beam_width)
+
       while True:
         try:
           nmt_outputs, _ = model.decode(sess)
-          if beam_width == 0:
+          if infer_mode != "beam_search":
             nmt_outputs = np.expand_dims(nmt_outputs, 0)
 
           batch_size = nmt_outputs.shape[1]

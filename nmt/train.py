@@ -35,7 +35,8 @@ utils.check_tensorflow_version()
 __all__ = [
     "run_sample_decode", "run_internal_eval", "run_external_eval",
     "run_avg_external_eval", "run_full_eval", "init_stats", "update_stats",
-    "print_step_info", "process_stats", "train"
+    "print_step_info", "process_stats", "train", "get_model_creator",
+    "add_info_summaries", "get_best_results"
 ]
 
 
@@ -52,20 +53,49 @@ def run_sample_decode(infer_model, infer_sess, model_dir, hparams,
                  infer_model.batch_size_placeholder, summary_writer)
 
 
-def run_internal_eval(
-    eval_model, eval_sess, model_dir, hparams, summary_writer,
-    use_test_set=True):
-  """Compute internal evaluation (perplexity) for both dev / test."""
+def run_internal_eval(eval_model,
+                      eval_sess,
+                      model_dir,
+                      hparams,
+                      summary_writer,
+                      use_test_set=True,
+                      dev_eval_iterator_feed_dict=None,
+                      test_eval_iterator_feed_dict=None):
+  """Compute internal evaluation (perplexity) for both dev / test.
+
+  Computes development and testing perplexities for given model.
+
+  Args:
+    eval_model: Evaluation model for which to compute perplexities.
+    eval_sess: Evaluation TensorFlow session.
+    model_dir: Directory from which to load evaluation model from.
+    hparams: Model hyper-parameters.
+    summary_writer: Summary writer for logging metrics to TensorBoard.
+    use_test_set: Computes testing perplexity if true; does not otherwise.
+      Note that the development perplexity is always computed regardless of
+      value of this parameter.
+    dev_eval_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      development evaluation.
+    test_eval_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      testing evaluation.
+  Returns:
+    Pair containing development perplexity and testing perplexity, in this
+    order.
+  """
+  if dev_eval_iterator_feed_dict is None:
+    dev_eval_iterator_feed_dict = {}
+  if test_eval_iterator_feed_dict is None:
+    test_eval_iterator_feed_dict = {}
   with eval_model.graph.as_default():
     loaded_eval_model, global_step = model_helper.create_or_load_model(
         eval_model.model, model_dir, eval_sess, "eval")
 
   dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
   dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
-  dev_eval_iterator_feed_dict = {
-      eval_model.src_file_placeholder: dev_src_file,
-      eval_model.tgt_file_placeholder: dev_tgt_file
-  }
+  dev_eval_iterator_feed_dict[eval_model.src_file_placeholder] = dev_src_file
+  dev_eval_iterator_feed_dict[eval_model.tgt_file_placeholder] = dev_tgt_file
 
   dev_ppl = _internal_eval(loaded_eval_model, global_step, eval_sess,
                            eval_model.iterator, dev_eval_iterator_feed_dict,
@@ -74,30 +104,64 @@ def run_internal_eval(
   if use_test_set and hparams.test_prefix:
     test_src_file = "%s.%s" % (hparams.test_prefix, hparams.src)
     test_tgt_file = "%s.%s" % (hparams.test_prefix, hparams.tgt)
-    test_eval_iterator_feed_dict = {
-        eval_model.src_file_placeholder: test_src_file,
-        eval_model.tgt_file_placeholder: test_tgt_file
-    }
+    test_eval_iterator_feed_dict[
+        eval_model.src_file_placeholder] = test_src_file
+    test_eval_iterator_feed_dict[
+        eval_model.tgt_file_placeholder] = test_tgt_file
     test_ppl = _internal_eval(loaded_eval_model, global_step, eval_sess,
                               eval_model.iterator, test_eval_iterator_feed_dict,
                               summary_writer, "test")
   return dev_ppl, test_ppl
 
 
-def run_external_eval(infer_model, infer_sess, model_dir, hparams,
-                      summary_writer, save_best_dev=True, use_test_set=True,
-                      avg_ckpts=False):
-  """Compute external evaluation (bleu, rouge, etc.) for both dev / test."""
+def run_external_eval(infer_model,
+                      infer_sess,
+                      model_dir,
+                      hparams,
+                      summary_writer,
+                      save_best_dev=True,
+                      use_test_set=True,
+                      avg_ckpts=False,
+                      dev_infer_iterator_feed_dict=None,
+                      test_infer_iterator_feed_dict=None):
+  """Compute external evaluation for both dev / test.
+
+  Computes development and testing external evaluation (e.g. bleu, rouge) for
+  given model.
+
+  Args:
+    infer_model: Inference model for which to compute perplexities.
+    infer_sess: Inference TensorFlow session.
+    model_dir: Directory from which to load inference model from.
+    hparams: Model hyper-parameters.
+    summary_writer: Summary writer for logging metrics to TensorBoard.
+    use_test_set: Computes testing external evaluation if true; does not
+      otherwise. Note that the development external evaluation is always
+      computed regardless of value of this parameter.
+    dev_infer_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      development external evaluation.
+    test_infer_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      testing external evaluation.
+  Returns:
+    Triple containing development scores, testing scores and the TensorFlow
+    Variable for the global step number, in this order.
+  """
+  if dev_infer_iterator_feed_dict is None:
+    dev_infer_iterator_feed_dict = {}
+  if test_infer_iterator_feed_dict is None:
+    test_infer_iterator_feed_dict = {}
   with infer_model.graph.as_default():
     loaded_infer_model, global_step = model_helper.create_or_load_model(
         infer_model.model, model_dir, infer_sess, "infer")
 
   dev_src_file = "%s.%s" % (hparams.dev_prefix, hparams.src)
   dev_tgt_file = "%s.%s" % (hparams.dev_prefix, hparams.tgt)
-  dev_infer_iterator_feed_dict = {
-      infer_model.src_placeholder: inference.load_data(dev_src_file),
-      infer_model.batch_size_placeholder: hparams.infer_batch_size,
-  }
+  dev_infer_iterator_feed_dict[
+      infer_model.src_placeholder] = inference.load_data(dev_src_file)
+  dev_infer_iterator_feed_dict[
+      infer_model.batch_size_placeholder] = hparams.infer_batch_size
   dev_scores = _external_eval(
       loaded_infer_model,
       global_step,
@@ -115,10 +179,10 @@ def run_external_eval(infer_model, infer_sess, model_dir, hparams,
   if use_test_set and hparams.test_prefix:
     test_src_file = "%s.%s" % (hparams.test_prefix, hparams.src)
     test_tgt_file = "%s.%s" % (hparams.test_prefix, hparams.tgt)
-    test_infer_iterator_feed_dict = {
-        infer_model.src_placeholder: inference.load_data(test_src_file),
-        infer_model.batch_size_placeholder: hparams.infer_batch_size,
-    }
+    test_infer_iterator_feed_dict[
+        infer_model.src_placeholder] = inference.load_data(test_src_file)
+    test_infer_iterator_feed_dict[
+        infer_model.batch_size_placeholder] = hparams.infer_batch_size
     test_scores = _external_eval(
         loaded_infer_model,
         global_step,
@@ -156,16 +220,63 @@ def run_avg_external_eval(infer_model, infer_sess, model_dir, hparams,
   return avg_dev_scores, avg_test_scores
 
 
-def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
-                  hparams, summary_writer, sample_src_data, sample_tgt_data,
-                  avg_ckpts=False):
-  """Wrapper for running sample_decode, internal_eval and external_eval."""
-  run_sample_decode(infer_model, infer_sess, model_dir, hparams, summary_writer,
-                    sample_src_data, sample_tgt_data)
+def run_internal_and_external_eval(model_dir,
+                                   infer_model,
+                                   infer_sess,
+                                   eval_model,
+                                   eval_sess,
+                                   hparams,
+                                   summary_writer,
+                                   avg_ckpts=False,
+                                   dev_eval_iterator_feed_dict=None,
+                                   test_eval_iterator_feed_dict=None,
+                                   dev_infer_iterator_feed_dict=None,
+                                   test_infer_iterator_feed_dict=None):
+  """Compute internal evaluation (perplexity) for both dev / test.
+
+  Computes development and testing perplexities for given model.
+
+  Args:
+    model_dir: Directory from which to load models from.
+    infer_model: Inference model for which to compute perplexities.
+    infer_sess: Inference TensorFlow session.
+    eval_model: Evaluation model for which to compute perplexities.
+    eval_sess: Evaluation TensorFlow session.
+    hparams: Model hyper-parameters.
+    summary_writer: Summary writer for logging metrics to TensorBoard.
+    avg_ckpts: Whether to compute average external evaluation scores.
+    dev_eval_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      internal development evaluation.
+    test_eval_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      internal testing evaluation.
+    dev_infer_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      external development evaluation.
+    test_infer_iterator_feed_dict: Feed dictionary for a TensorFlow session.
+      Can be used to pass in additional inputs necessary for running the
+      external testing evaluation.
+  Returns:
+    Triple containing results summary, global step Tensorflow Variable and
+    metrics in this order.
+  """
   dev_ppl, test_ppl = run_internal_eval(
-      eval_model, eval_sess, model_dir, hparams, summary_writer)
+      eval_model,
+      eval_sess,
+      model_dir,
+      hparams,
+      summary_writer,
+      dev_eval_iterator_feed_dict=dev_eval_iterator_feed_dict,
+      test_eval_iterator_feed_dict=test_eval_iterator_feed_dict)
   dev_scores, test_scores, global_step = run_external_eval(
-      infer_model, infer_sess, model_dir, hparams, summary_writer)
+      infer_model,
+      infer_sess,
+      model_dir,
+      hparams,
+      summary_writer,
+      dev_infer_iterator_feed_dict=dev_infer_iterator_feed_dict,
+      test_infer_iterator_feed_dict=test_infer_iterator_feed_dict)
 
   metrics = {
       "dev_ppl": dev_ppl,
@@ -196,25 +307,64 @@ def run_full_eval(model_dir, infer_model, infer_sess, eval_model, eval_sess,
   return result_summary, global_step, metrics
 
 
+def run_full_eval(model_dir,
+                  infer_model,
+                  infer_sess,
+                  eval_model,
+                  eval_sess,
+                  hparams,
+                  summary_writer,
+                  sample_src_data,
+                  sample_tgt_data,
+                  avg_ckpts=False):
+  """Wrapper for running sample_decode, internal_eval and external_eval.
+
+  Args:
+    model_dir: Directory from which to load models from.
+    infer_model: Inference model for which to compute perplexities.
+    infer_sess: Inference TensorFlow session.
+    eval_model: Evaluation model for which to compute perplexities.
+    eval_sess: Evaluation TensorFlow session.
+    hparams: Model hyper-parameters.
+    summary_writer: Summary writer for logging metrics to TensorBoard.
+    sample_src_data: sample of source data for sample decoding.
+    sample_tgt_data: sample of target data for sample decoding.
+    avg_ckpts: Whether to compute average external evaluation scores.
+  Returns:
+    Triple containing results summary, global step Tensorflow Variable and
+    metrics in this order.
+  """
+  run_sample_decode(infer_model, infer_sess, model_dir, hparams, summary_writer,
+                    sample_src_data, sample_tgt_data)
+  return run_internal_and_external_eval(model_dir, infer_model, infer_sess,
+                                        eval_model, eval_sess, hparams,
+                                        summary_writer, avg_ckpts)
+
+
 def init_stats():
   """Initialize statistics that we want to accumulate."""
-  return {"step_time": 0.0, "loss": 0.0, "predict_count": 0.0,
-          "total_count": 0.0, "grad_norm": 0.0}
+  return {"step_time": 0.0, "train_loss": 0.0,
+          "predict_count": 0.0,  # word count on the target side
+          "word_count": 0.0,  # word counts for both source and target
+          "sequence_count": 0.0,  # number of training examples processed
+          "grad_norm": 0.0}
 
 
 def update_stats(stats, start_time, step_result):
   """Update stats: write summary and accumulate statistics."""
-  (_, step_loss, step_predict_count, step_summary, global_step,
-   step_word_count, batch_size, grad_norm, learning_rate) = step_result
+  _, output_tuple = step_result
 
   # Update statistics
-  stats["step_time"] += (time.time() - start_time)
-  stats["loss"] += (step_loss * batch_size)
-  stats["predict_count"] += step_predict_count
-  stats["total_count"] += float(step_word_count)
-  stats["grad_norm"] += grad_norm
+  batch_size = output_tuple.batch_size
+  stats["step_time"] += time.time() - start_time
+  stats["train_loss"] += output_tuple.train_loss * batch_size
+  stats["grad_norm"] += output_tuple.grad_norm
+  stats["predict_count"] += output_tuple.predict_count
+  stats["word_count"] += output_tuple.word_count
+  stats["sequence_count"] += batch_size
 
-  return global_step, learning_rate, step_summary
+  return (output_tuple.global_step, output_tuple.learning_rate,
+          output_tuple.train_summary)
 
 
 def print_step_info(prefix, global_step, info, result_summary, log_f):
@@ -227,13 +377,25 @@ def print_step_info(prefix, global_step, info, result_summary, log_f):
       log_f)
 
 
+def add_info_summaries(summary_writer, global_step, info):
+  """Add stuffs in info to summaries."""
+  excluded_list = ["learning_rate"]
+  for key in info:
+    if key not in excluded_list:
+      utils.add_summary(summary_writer, global_step, key, info[key])
+
+
 def process_stats(stats, info, global_step, steps_per_stats, log_f):
   """Update info and check for overflow."""
-  # Update info
+  # Per-step info
   info["avg_step_time"] = stats["step_time"] / steps_per_stats
   info["avg_grad_norm"] = stats["grad_norm"] / steps_per_stats
-  info["train_ppl"] = utils.safe_exp(stats["loss"] / stats["predict_count"])
-  info["speed"] = stats["total_count"] / (1000 * stats["step_time"])
+  info["avg_sequence_count"] = stats["sequence_count"] / steps_per_stats
+  info["speed"] = stats["word_count"] / (1000 * stats["step_time"])
+
+  # Per-predict info
+  info["train_ppl"] = (
+      utils.safe_exp(stats["train_loss"] / stats["predict_count"]))
 
   # Check for overflow
   is_overflow = False
@@ -250,8 +412,10 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
                  hparams, log_f):
   """Misc tasks to do before training."""
   stats = init_stats()
-  info = {"train_ppl": 0.0, "speed": 0.0, "avg_step_time": 0.0,
+  info = {"train_ppl": 0.0, "speed": 0.0,
+          "avg_step_time": 0.0,
           "avg_grad_norm": 0.0,
+          "avg_sequence_count": 0.0,
           "learning_rate": loaded_train_model.learning_rate.eval(
               session=train_sess)}
   start_train_time = time.time()
@@ -268,6 +432,21 @@ def before_train(loaded_train_model, train_model, train_sess, global_step,
   return stats, info, start_train_time
 
 
+def get_model_creator(hparams):
+  """Get the right model class depending on configuration."""
+  if (hparams.encoder_type == "gnmt" or
+      hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
+    model_creator = gnmt_model.GNMTModel
+  elif hparams.attention_architecture == "standard":
+    model_creator = attention_model.AttentionModel
+  elif not hparams.attention:
+    model_creator = nmt_model.Model
+  else:
+    raise ValueError("Unknown attention architecture %s" %
+                     hparams.attention_architecture)
+  return model_creator
+
+
 def train(hparams, scope=None, target_session=""):
   """Train a translation model."""
   log_device_placement = hparams.log_device_placement
@@ -281,18 +460,8 @@ def train(hparams, scope=None, target_session=""):
   if not steps_per_external_eval:
     steps_per_external_eval = 5 * steps_per_eval
 
-  if not hparams.attention:
-    model_creator = nmt_model.Model
-  else:  # Attention
-    if (hparams.encoder_type == "gnmt" or
-        hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
-      model_creator = gnmt_model.GNMTModel
-    elif hparams.attention_architecture == "standard":
-      model_creator = attention_model.AttentionModel
-    else:
-      raise ValueError("Unknown attention architecture %s" %
-                       hparams.attention_architecture)
-
+  # Create model
+  model_creator = get_model_creator(hparams)
   train_model = model_helper.create_train_model(model_creator, hparams, scope)
   eval_model = model_helper.create_eval_model(model_creator, hparams, scope)
   infer_model = model_helper.create_infer_model(model_creator, hparams, scope)
@@ -381,7 +550,7 @@ def train(hparams, scope=None, target_session=""):
       last_stats_step = global_step
       is_overflow = process_stats(
           stats, info, global_step, steps_per_stats, log_f)
-      print_step_info("  ", global_step, info, _get_best_results(hparams),
+      print_step_info("  ", global_step, info, get_best_results(hparams),
                       log_f)
       if is_overflow:
         break
@@ -392,8 +561,7 @@ def train(hparams, scope=None, target_session=""):
     if global_step - last_eval_step >= steps_per_eval:
       last_eval_step = global_step
       utils.print_out("# Save eval, global step %d" % global_step)
-      utils.add_summary(summary_writer, global_step, "train_ppl",
-                        info["train_ppl"])
+      add_info_summaries(summary_writer, global_step, info)
 
       # Save checkpoint
       loaded_train_model.saver.save(
@@ -482,7 +650,7 @@ def _format_results(name, ppl, scores, metrics):
   return result_str
 
 
-def _get_best_results(hparams):
+def get_best_results(hparams):
   """Summary of the current best results."""
   tokens = []
   for metric in hparams.metrics:
@@ -514,7 +682,7 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
 
   nmt_outputs, attention_summary = model.decode(sess)
 
-  if hparams.beam_width > 0:
+  if hparams.infer_mode == "beam_search":
     # get the top translation.
     nmt_outputs = nmt_outputs[0]
 
@@ -558,7 +726,8 @@ def _external_eval(model, global_step, sess, hparams, iterator,
       subword_option=hparams.subword_option,
       beam_width=hparams.beam_width,
       tgt_eos=hparams.eos,
-      decode=decode)
+      decode=decode,
+      infer_mode=hparams.infer_mode)
   # Save on best metrics
   if decode:
     for metric in hparams.metrics:

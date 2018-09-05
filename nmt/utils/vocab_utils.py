@@ -27,11 +27,75 @@ from tensorflow.python.ops import lookup_ops
 
 from ..utils import misc_utils as utils
 
-
+# word level special token
 UNK = "<unk>"
 SOS = "<s>"
 EOS = "</s>"
 UNK_ID = 0
+
+# char ids 0-255 come from utf-8 encoding bytes
+# assign 256-300 to special chars
+BOS_CHAR_ID = 256  # <begin sentence>
+EOS_CHAR_ID = 257  # <end sentence>
+BOW_CHAR_ID = 258  # <begin word>
+EOW_CHAR_ID = 259  # <end word>
+PAD_CHAR_ID = 260  # <padding>
+
+DEFAULT_CHAR_MAXLEN = 50  # max number of chars for each word.
+
+
+def _string_to_bytes(text, max_length):
+  """Given string and length, convert to byte seq of at most max_length.
+
+  This process mimics docqa/elmo's preprocessing:
+  https://github.com/allenai/document-qa/blob/master/docqa/elmo/data.py
+
+  Note that we make use of BOS_CHAR_ID and EOS_CHAR_ID in iterator_utils.py & 
+  our usage differs from docqa/elmo.
+
+  Args:
+    text: tf.string tensor of shape []
+    max_length: max number of chars for each word.
+
+  Returns:
+    A tf.int32 tensor of the byte encoded text.
+  """
+  byte_ids = tf.to_int32(tf.decode_raw(text, tf.uint8))
+  byte_ids = byte_ids[:max_length - 2]
+  padding = tf.fill([max_length - tf.shape(byte_ids)[0] - 2], PAD_CHAR_ID)
+  byte_ids = tf.concat(
+      [[BOW_CHAR_ID], byte_ids, [EOW_CHAR_ID], padding], axis=0)
+  tf.logging.info(byte_ids)
+
+  byte_ids = tf.reshape(byte_ids, [max_length])
+  tf.logging.info(byte_ids.get_shape().as_list())
+  return byte_ids + 1
+
+
+def tokens_to_bytes(tokens):
+  """Given a sequence of strings, map to sequence of bytes.
+
+  Args:
+    tokens: A tf.string tensor
+
+  Returns:
+    A tensor of shape words.shape + [bytes_per_word] containing byte versions
+    of each word.
+  """
+  bytes_per_word = DEFAULT_CHAR_MAXLEN
+  with tf.device("/cpu:0"):
+    tf.assert_rank(tokens, 1)
+    shape = tf.shape(tokens)
+    tf.logging.info(tokens)
+    tokens_flat = tf.reshape(tokens, [-1])
+    as_bytes_flat = tf.map_fn(
+        fn=lambda x: _string_to_bytes(x, max_length=bytes_per_word),
+        elems=tokens_flat,
+        dtype=tf.int32,
+        back_prop=False)
+    tf.logging.info(as_bytes_flat)
+    as_bytes = tf.reshape(as_bytes_flat, [shape[0], bytes_per_word])
+  return as_bytes
 
 
 def load_vocab(vocab_file):
@@ -91,12 +155,14 @@ def create_vocab_tables(src_vocab_file, tgt_vocab_file, share_vocab):
 def load_embed_txt(embed_file):
   """Load embed_file into a python dictionary.
 
-  Note: the embed_file should be a Glove formated txt file. Assuming
-  embed_size=5, for example:
+  Note: the embed_file should be a Glove/word2vec formatted txt file. Assuming
+  Here is an exampe assuming embed_size=5:
 
   the -0.071549 0.093459 0.023738 -0.090339 0.056123
   to 0.57346 0.5417 -0.23477 -0.3624 0.4037
   and 0.20327 0.47348 0.050877 0.002103 0.060547
+
+  For word2vec format, the first line will be: <num_words> <emb_size>.
 
   Args:
     embed_file: file path to the embedding file.
@@ -105,14 +171,24 @@ def load_embed_txt(embed_file):
   """
   emb_dict = dict()
   emb_size = None
-  with codecs.getreader("utf-8")(tf.gfile.GFile(embed_file, 'rb')) as f:
+
+  is_first_line = True
+  with codecs.getreader("utf-8")(tf.gfile.GFile(embed_file, "rb")) as f:
     for line in f:
-      tokens = line.strip().split(" ")
+      tokens = line.rstrip().split(" ")
+      if is_first_line:
+        is_first_line = False
+        if len(tokens) == 2:  # header line
+          emb_size = int(tokens[1])
+          continue
       word = tokens[0]
       vec = list(map(float, tokens[1:]))
       emb_dict[word] = vec
       if emb_size:
-        assert emb_size == len(vec), "All embedding size should be same."
+        if emb_size != len(vec):
+          utils.print_out(
+              "Ignoring %s since embeding size is inconsistent." % word)
+          del emb_dict[word]
       else:
         emb_size = len(vec)
   return emb_dict, emb_size

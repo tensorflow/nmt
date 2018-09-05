@@ -34,6 +34,9 @@ float32 = np.float32
 int32 = np.int32
 array = np.array
 
+SOS = '<s>'
+EOS = '</s>'
+
 
 class ModelTest(tf.test.TestCase):
 
@@ -143,6 +146,7 @@ class ModelTest(tf.test.TestCase):
         'UniEncoderStandardAttentionArchitecture/loss': 8.8519087,
         'InitializerGlorotNormal/loss': 8.9779415,
         'InitializerGlorotUniform/loss': 8.7643699,
+        'SampledSoftmaxLoss/loss': 5.83928,
     }
 
     cls.actual_eval_values = {}
@@ -186,15 +190,15 @@ class ModelTest(tf.test.TestCase):
     cls.actual_beam_sentences = {}
     cls.expected_beam_sentences = {
         'BeamSearchAttentionModel: batch 0 of beam 0': '',
-        'BeamSearchAttentionModel: batch 0 of beam 1': 'sos a sos a',
+        'BeamSearchAttentionModel: batch 0 of beam 1': '%s a %s a' % (SOS, SOS),
         'BeamSearchAttentionModel: batch 1 of beam 0': '',
         'BeamSearchAttentionModel: batch 1 of beam 1': 'b',
         'BeamSearchBasicModel: batch 0 of beam 0': 'b b b b',
-        'BeamSearchBasicModel: batch 0 of beam 1': 'b b b sos',
+        'BeamSearchBasicModel: batch 0 of beam 1': 'b b b %s' % SOS,
         'BeamSearchBasicModel: batch 0 of beam 2': 'b b b c',
         'BeamSearchBasicModel: batch 1 of beam 0': 'b b b b',
         'BeamSearchBasicModel: batch 1 of beam 1': 'a b b b',
-        'BeamSearchBasicModel: batch 1 of beam 2': 'b b b sos',
+        'BeamSearchBasicModel: batch 1 of beam 2': 'b b b %s' % SOS,
         'BeamSearchGNMTModel: batch 0 of beam 0': '',
         'BeamSearchGNMTModel: batch 1 of beam 0': '',
     }
@@ -250,8 +254,8 @@ class ModelTest(tf.test.TestCase):
 
   def _assertTrainStepsLoss(self, m, sess, name, num_steps=1):
     for _ in range(num_steps):
-      _, loss, _, _, _, _, _, _, _ = m.train(sess)
-
+      _, output_tuple = m.train(sess)
+    loss = output_tuple.train_loss
     print('{} {}-th step loss is: '.format(name, num_steps), loss)
     expected_loss = self.expected_train_values[name + '/loss']
     self.actual_train_values[name + '/loss'] = loss
@@ -259,8 +263,9 @@ class ModelTest(tf.test.TestCase):
     self.assertAllClose(expected_loss, loss)
 
   def _assertEvalLossAndPredictCount(self, m, sess, name):
-    loss, predict_count, _ = m.eval(sess)
-
+    output_tuple = m.eval(sess)
+    loss = output_tuple.eval_loss
+    predict_count = output_tuple.predict_count
     print('{} eval loss is: '.format(name), loss)
     print('{} predict count is: '.format(name), predict_count)
     expected_loss = self.expected_eval_values[name + '/loss']
@@ -272,8 +277,8 @@ class ModelTest(tf.test.TestCase):
     self.assertAllClose(expected_predict_count, predict_count)
 
   def _assertInferLogits(self, m, sess, name):
-    results = m.infer(sess)
-    logits_sum = np.sum(results[0])
+    output_tuple = m.infer(sess)
+    logits_sum = np.sum(output_tuple.infer_logits)
 
     print('{} infer logits sum is: '.format(name), logits_sum)
     expected_logits_sum = self.expected_infer_values[name + '/logits_sum']
@@ -288,7 +293,7 @@ class ModelTest(tf.test.TestCase):
       output_words = nmt_outputs[i]
       for j in range(output_words.shape[0]):
         sentence = nmt_utils.get_translation(
-            output_words, j, tgt_eos='eos', subword_option='')
+            output_words, j, tgt_eos=EOS, subword_option='')
         sentence_key = ('%s: batch %d of beam %d' % (name, j, i))
         self.actual_beam_sentences[sentence_key] = sentence
         expected_sentence = self.expected_beam_sentences[sentence_key]
@@ -939,6 +944,7 @@ class ModelTest(tf.test.TestCase):
         attention_architecture='',
         use_residual=False,)
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 3
 
@@ -956,6 +962,7 @@ class ModelTest(tf.test.TestCase):
         num_layers=2,
         use_residual=False,)
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 2
 
@@ -972,6 +979,7 @@ class ModelTest(tf.test.TestCase):
         attention='scaled_luong',
         attention_architecture='gnmt')
     hparams.beam_width = 3
+    hparams.infer_mode = "beam_search"
     hparams.tgt_max_len_infer = 4
     assert_top_k_sentence = 1
 
@@ -1008,6 +1016,19 @@ class ModelTest(tf.test.TestCase):
       train_m = self._createTestTrainModel(model.Model, hparams, sess)
       self._assertTrainStepsLoss(train_m, sess,
                                  'InitializerGlorotUniform')
+
+  def testSampledSoftmaxLoss(self):
+    hparams = common_test_utils.create_test_hparams(
+        encoder_type='gnmt',
+        num_layers=4,
+        attention='scaled_luong',
+        attention_architecture='gnmt')
+    hparams.num_sampled_softmax = 3
+
+    with self.test_session() as sess:
+      train_m = self._createTestTrainModel(gnmt_model.GNMTModel, hparams, sess)
+      self._assertTrainStepsLoss(train_m, sess,
+                                 'SampledSoftmaxLoss')
 
 if __name__ == '__main__':
   tf.test.main()

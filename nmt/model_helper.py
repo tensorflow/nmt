@@ -1,20 +1,32 @@
+# Copyright 2017 Google Inc. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 """Utility functions for building models."""
 from __future__ import print_function
 
 import collections
-import six
 import os
 import time
-
 import numpy as np
+import six
 import tensorflow as tf
 
 from tensorflow.python.ops import lookup_ops
-
 from .utils import iterator_utils
 from .utils import misc_utils as utils
 from .utils import vocab_utils
-
 
 __all__ = [
     "get_initializer", "get_device_str", "create_train_model",
@@ -54,7 +66,7 @@ def get_device_str(device_id, num_gpus):
 
 class ExtraArgs(collections.namedtuple(
     "ExtraArgs", ("single_cell_fn", "model_device_fn",
-                  "attention_mechanism_fn"))):
+                  "attention_mechanism_fn", "encoder_emb_lookup_fn"))):
   pass
 
 
@@ -79,8 +91,8 @@ def create_train_model(
     src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
         src_vocab_file, tgt_vocab_file, hparams.share_vocab)
 
-    src_dataset = tf.data.TextLineDataset(src_file)
-    tgt_dataset = tf.data.TextLineDataset(tgt_file)
+    src_dataset = tf.data.TextLineDataset(tf.gfile.Glob(src_file))
+    tgt_dataset = tf.data.TextLineDataset(tf.gfile.Glob(tgt_file))
     skip_count_placeholder = tf.placeholder(shape=(), dtype=tf.int64)
 
     iterator = iterator_utils.get_iterator(
@@ -97,7 +109,8 @@ def create_train_model(
         tgt_max_len=hparams.tgt_max_len,
         skip_count=skip_count_placeholder,
         num_shards=num_workers,
-        shard_index=jobid)
+        shard_index=jobid,
+        use_char_encode=hparams.use_char_encode)
 
     # Note: One can set model_device_fn to
     # `tf.train.replica_device_setter(ps_tasks)` for distributed training.
@@ -136,6 +149,9 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
   with graph.as_default(), tf.container(scope or "eval"):
     src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
         src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
+        tgt_vocab_file, default_value=vocab_utils.UNK)
+
     src_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     tgt_file_placeholder = tf.placeholder(shape=(), dtype=tf.string)
     src_dataset = tf.data.TextLineDataset(src_file_placeholder)
@@ -151,13 +167,15 @@ def create_eval_model(model_creator, hparams, scope=None, extra_args=None):
         random_seed=hparams.random_seed,
         num_buckets=hparams.num_buckets,
         src_max_len=hparams.src_max_len_infer,
-        tgt_max_len=hparams.tgt_max_len_infer)
+        tgt_max_len=hparams.tgt_max_len_infer,
+        use_char_encode=hparams.use_char_encode)
     model = model_creator(
         hparams,
         iterator=iterator,
         mode=tf.contrib.learn.ModeKeys.EVAL,
         source_vocab_table=src_vocab_table,
         target_vocab_table=tgt_vocab_table,
+        reverse_target_vocab_table=reverse_tgt_vocab_table,
         scope=scope,
         extra_args=extra_args)
   return EvalModel(
@@ -197,7 +215,8 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
         src_vocab_table,
         batch_size=batch_size_placeholder,
         eos=hparams.eos,
-        src_max_len=hparams.src_max_len_infer)
+        src_max_len=hparams.src_max_len_infer,
+        use_char_encode=hparams.use_char_encode)
     model = model_creator(
         hparams,
         iterator=iterator,
@@ -274,11 +293,13 @@ def create_emb_for_encoder_and_decoder(share_vocab,
                                        src_embed_size,
                                        tgt_embed_size,
                                        dtype=tf.float32,
-                                       num_partitions=0,
+                                       num_enc_partitions=0,
+                                       num_dec_partitions=0,
                                        src_vocab_file=None,
                                        tgt_vocab_file=None,
                                        src_embed_file=None,
                                        tgt_embed_file=None,
+                                       use_char_encode=False,
                                        scope=None):
   """Create embedding matrix for both encoder and decoder.
 
@@ -292,7 +313,10 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     tgt_embed_size: An integer. The embedding dimension for the decoder's
       embedding.
     dtype: dtype of the embedding matrix. Default to float32.
-    num_partitions: number of partitions used for the embedding vars.
+    num_enc_partitions: number of partitions used for the encoder's embedding
+      vars.
+    num_dec_partitions: number of partitions used for the decoder's embedding
+      vars.
     scope: VariableScope for the created subgraph. Default to "embedding".
 
   Returns:
@@ -303,22 +327,36 @@ def create_emb_for_encoder_and_decoder(share_vocab,
     ValueError: if use share_vocab but source and target have different vocab
       size.
   """
-
-  if num_partitions <= 1:
-    partitioner = None
+  if num_enc_partitions <= 1:
+    enc_partitioner = None
   else:
     # Note: num_partitions > 1 is required for distributed training due to
     # embedding_lookup tries to colocate single partition-ed embedding variable
     # with lookup ops. This may cause embedding variables being placed on worker
     # jobs.
-    partitioner = tf.fixed_size_partitioner(num_partitions)
+    enc_partitioner = tf.fixed_size_partitioner(num_enc_partitions)
 
-  if (src_embed_file or tgt_embed_file) and partitioner:
+  if num_dec_partitions <= 1:
+    dec_partitioner = None
+  else:
+    # Note: num_partitions > 1 is required for distributed training due to
+    # embedding_lookup tries to colocate single partition-ed embedding variable
+    # with lookup ops. This may cause embedding variables being placed on worker
+    # jobs.
+    dec_partitioner = tf.fixed_size_partitioner(num_dec_partitions)
+
+  if src_embed_file and enc_partitioner:
     raise ValueError(
-        "Can't set num_partitions > 1 when using pretrained embedding")
+        "Can't set num_enc_partitions > 1 when using pretrained encoder "
+        "embedding")
+
+  if tgt_embed_file and dec_partitioner:
+    raise ValueError(
+        "Can't set num_dec_partitions > 1 when using pretrained decdoer "
+        "embedding")
 
   with tf.variable_scope(
-      scope or "embeddings", dtype=dtype, partitioner=partitioner) as scope:
+      scope or "embeddings", dtype=dtype, partitioner=enc_partitioner) as scope:
     # Share embedding
     if share_vocab:
       if src_vocab_size != tgt_vocab_size:
@@ -334,12 +372,15 @@ def create_emb_for_encoder_and_decoder(share_vocab,
           src_vocab_size, src_embed_size, dtype)
       embedding_decoder = embedding_encoder
     else:
-      with tf.variable_scope("encoder", partitioner=partitioner):
-        embedding_encoder = _create_or_load_embed(
-            "embedding_encoder", src_vocab_file, src_embed_file,
-            src_vocab_size, src_embed_size, dtype)
+      if not use_char_encode:
+        with tf.variable_scope("encoder", partitioner=enc_partitioner):
+          embedding_encoder = _create_or_load_embed(
+              "embedding_encoder", src_vocab_file, src_embed_file,
+              src_vocab_size, src_embed_size, dtype)
+      else:
+        embedding_encoder = None
 
-      with tf.variable_scope("decoder", partitioner=partitioner):
+      with tf.variable_scope("decoder", partitioner=dec_partitioner):
         embedding_decoder = _create_or_load_embed(
             "embedding_decoder", tgt_vocab_file, tgt_embed_file,
             tgt_vocab_size, tgt_embed_size, dtype)
@@ -478,13 +519,29 @@ def gradient_clip(gradients, max_gradient_norm):
   return clipped_gradients, gradient_norm_summary, gradient_norm
 
 
-def load_model(model, ckpt, session, name):
+def print_variables_in_ckpt(ckpt_path):
+  """Print a list of variables in a checkpoint together with their shapes."""
+  utils.print_out("# Variables in ckpt %s" % ckpt_path)
+  reader = tf.train.NewCheckpointReader(ckpt_path)
+  variable_map = reader.get_variable_to_shape_map()
+  for key in sorted(variable_map.keys()):
+    utils.print_out("  %s: %s" % (key, variable_map[key]))
+
+
+def load_model(model, ckpt_path, session, name):
+  """Load model from a checkpoint."""
   start_time = time.time()
-  model.saver.restore(session, ckpt)
+  try:
+    model.saver.restore(session, ckpt_path)
+  except tf.errors.NotFoundError as e:
+    utils.print_out("Can't load checkpoint")
+    print_variables_in_ckpt(ckpt_path)
+    utils.print_out("%s" % str(e))
+
   session.run(tf.tables_initializer())
   utils.print_out(
       "  loaded %s model parameters from %s, time %.2fs" %
-      (name, ckpt, time.time() - start_time))
+      (name, ckpt_path, time.time() - start_time))
   return model
 
 
@@ -594,9 +651,9 @@ def compute_perplexity(model, sess, name):
 
   while True:
     try:
-      loss, predict_count, batch_size = model.eval(sess)
-      total_loss += loss * batch_size
-      total_predict_count += predict_count
+      output_tuple = model.eval(sess)
+      total_loss += output_tuple.eval_loss * output_tuple.batch_size
+      total_predict_count += output_tuple.predict_count
     except tf.errors.OutOfRangeError:
       break
 

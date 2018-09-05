@@ -23,11 +23,8 @@ import os
 import numpy as np
 import tensorflow as tf
 
-from . import attention_model
-from . import model_helper
-from . import model as nmt_model
-from . import gnmt_model
 from . import inference
+from . import model_helper
 from .utils import common_test_utils
 
 float32 = np.float32
@@ -37,24 +34,26 @@ array = np.array
 
 class InferenceTest(tf.test.TestCase):
 
-  def _createTestInferCheckpoint(self, hparams, out_dir):
-    if not hparams.attention:
-      model_creator = nmt_model.Model
-    elif hparams.attention_architecture == "standard":
-      model_creator = attention_model.AttentionModel
-    elif hparams.attention_architecture in ["gnmt", "gnmt_v2"]:
-      model_creator = gnmt_model.GNMTModel
-    else:
-      raise ValueError("Unknown model architecture")
+  def _createTestInferCheckpoint(self, hparams, name):
+    # Prepare
+    hparams.vocab_prefix = (
+        "nmt/testdata/test_infer_vocab")
+    hparams.src_vocab_file = hparams.vocab_prefix + "." + hparams.src
+    hparams.tgt_vocab_file = hparams.vocab_prefix + "." + hparams.tgt
+    out_dir = os.path.join(tf.test.get_temp_dir(), name)
+    os.makedirs(out_dir)
+    hparams.out_dir = out_dir
 
+    # Create check point
+    model_creator = inference.get_model_creator(hparams)
     infer_model = model_helper.create_infer_model(model_creator, hparams)
     with self.test_session(graph=infer_model.graph) as sess:
       loaded_model, global_step = model_helper.create_or_load_model(
           infer_model.model, out_dir, sess, "infer_name")
-      ckpt = loaded_model.saver.save(
+      ckpt_path = loaded_model.saver.save(
           sess, os.path.join(out_dir, "translate.ckpt"),
           global_step=global_step)
-    return ckpt
+    return ckpt_path
 
   def testBasicModel(self):
     hparams = common_test_utils.create_test_hparams(
@@ -63,17 +62,10 @@ class InferenceTest(tf.test.TestCase):
         attention="",
         attention_architecture="",
         use_residual=False,)
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
-
+    ckpt_path = self._createTestInferCheckpoint(hparams, "basic_infer")
     infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
-    inference.inference(ckpt, infer_file, output_infer, hparams)
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
+    inference.inference(ckpt_path, infer_file, output_infer, hparams)
     with open(output_infer) as f:
       self.assertEqual(5, len(list(f)))
 
@@ -87,17 +79,12 @@ class InferenceTest(tf.test.TestCase):
         num_translations_per_input=2,
         beam_width=2,
     )
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
+    hparams.infer_mode = "beam_search"
 
+    ckpt_path = self._createTestInferCheckpoint(hparams, "multi_basic_infer")
     infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(), "multi_basic_infer")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
-    inference.inference(ckpt, infer_file, output_infer, hparams)
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
+    inference.inference(ckpt_path, infer_file, output_infer, hparams)
     with open(output_infer) as f:
       self.assertEqual(10, len(list(f)))
 
@@ -108,17 +95,10 @@ class InferenceTest(tf.test.TestCase):
         attention="scaled_luong",
         attention_architecture="standard",
         use_residual=False,)
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
-
+    ckpt_path = self._createTestInferCheckpoint(hparams, "attention_infer")
     infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(), "attention_infer")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
-    inference.inference(ckpt, infer_file, output_infer, hparams)
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
+    inference.inference(ckpt_path, infer_file, output_infer, hparams)
     with open(output_infer) as f:
       self.assertEqual(5, len(list(f)))
 
@@ -129,15 +109,6 @@ class InferenceTest(tf.test.TestCase):
         attention="scaled_luong",
         attention_architecture="standard",
         use_residual=False,)
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
-
-    infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(), "multi_worker_infer")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
 
     num_workers = 3
 
@@ -146,17 +117,19 @@ class InferenceTest(tf.test.TestCase):
     # cases.
     hparams.batch_size = 3
 
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
+    ckpt_path = self._createTestInferCheckpoint(hparams, "multi_worker_infer")
+    infer_file = "nmt/testdata/test_infer_file"
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
     inference.inference(
-        ckpt, infer_file, output_infer, hparams, num_workers, jobid=1)
+        ckpt_path, infer_file, output_infer, hparams, num_workers, jobid=1)
 
     inference.inference(
-        ckpt, infer_file, output_infer, hparams, num_workers, jobid=2)
+        ckpt_path, infer_file, output_infer, hparams, num_workers, jobid=2)
 
     # Note: Need to start job 0 at the end; otherwise, it will block the testing
     # thread.
     inference.inference(
-        ckpt, infer_file, output_infer, hparams, num_workers, jobid=0)
+        ckpt_path, infer_file, output_infer, hparams, num_workers, jobid=0)
 
     with open(output_infer) as f:
       self.assertEqual(5, len(list(f)))
@@ -169,17 +142,11 @@ class InferenceTest(tf.test.TestCase):
         attention_architecture="",
         use_residual=False,
         inference_indices=[0])
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
-
+    ckpt_path = self._createTestInferCheckpoint(hparams,
+                                                "basic_infer_with_indices")
     infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(), "basic_infer_with_indices")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
-    inference.inference(ckpt, infer_file, output_infer, hparams)
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
+    inference.inference(ckpt_path, infer_file, output_infer, hparams)
     with open(output_infer) as f:
       self.assertEqual(1, len(list(f)))
 
@@ -193,18 +160,11 @@ class InferenceTest(tf.test.TestCase):
         inference_indices=[1, 2])
     # TODO(rzhao): Make infer indices support batch_size > 1.
     hparams.infer_batch_size = 1
-    vocab_prefix = "nmt/testdata/test_infer_vocab"
-    hparams.src_vocab_file = vocab_prefix + "." + hparams.src
-    hparams.tgt_vocab_file = vocab_prefix + "." + hparams.tgt
-
+    ckpt_path = self._createTestInferCheckpoint(hparams,
+                                                "attention_infer_with_indices")
     infer_file = "nmt/testdata/test_infer_file"
-    out_dir = os.path.join(tf.test.get_temp_dir(),
-                           "attention_infer_with_indices")
-    hparams.out_dir = out_dir
-    os.makedirs(out_dir)
-    output_infer = os.path.join(out_dir, "output_infer")
-    ckpt = self._createTestInferCheckpoint(hparams, out_dir)
-    inference.inference(ckpt, infer_file, output_infer, hparams)
+    output_infer = os.path.join(hparams.out_dir, "output_infer")
+    inference.inference(ckpt_path, infer_file, output_infer, hparams)
     with open(output_infer) as f:
       self.assertEqual(2, len(list(f)))
     self.assertTrue(os.path.exists(output_infer+str(1)+".png"))
