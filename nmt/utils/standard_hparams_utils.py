@@ -95,6 +95,7 @@ def create_standard_hparams():
       # only enable beam search during inference when beam_width > 0.
       beam_width=0,
       length_penalty_weight=0.0,
+      coverage_penalty_weight=0.0,
       override_loaded_hparams=True,
       num_keep_ckpts=5,
       avg_ckpts=False,

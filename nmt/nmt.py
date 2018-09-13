@@ -37,8 +37,9 @@ FLAGS = None
 
 INFERENCE_KEYS = ["src_max_len_infer", "tgt_max_len_infer", "subword_option",
                   "infer_batch_size", "beam_width",
-                  "length_penalty_weight", "sampling_temperature",
-                  "num_translations_per_input", "infer_mode"]
+                  "length_penalty_weight", "coverage_penalty_weight",
+                  "sampling_temperature", "num_translations_per_input",
+                  "infer_mode"]
 
 
 def add_arguments(parser):
@@ -288,6 +289,8 @@ def add_arguments(parser):
       """))
   parser.add_argument("--length_penalty_weight", type=float, default=0.0,
                       help="Length penalty for beam search.")
+  parser.add_argument("--coverage_penalty_weight", type=float, default=0.0,
+                      help="Coverage penalty for beam search.")
   parser.add_argument("--sampling_temperature", type=float,
                       default=0.0,
                       help=("""\
@@ -370,6 +373,7 @@ def create_hparams(flags):
       infer_mode=flags.infer_mode,
       beam_width=flags.beam_width,
       length_penalty_weight=flags.length_penalty_weight,
+      coverage_penalty_weight=flags.coverage_penalty_weight,
       sampling_temperature=flags.sampling_temperature,
       num_translations_per_input=flags.num_translations_per_input,
 
