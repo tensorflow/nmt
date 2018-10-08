@@ -297,6 +297,11 @@ class ModelTest(tf.test.TestCase):
         sentence_key = ('%s: batch %d of beam %d' % (name, j, i))
         self.actual_beam_sentences[sentence_key] = sentence
         expected_sentence = self.expected_beam_sentences[sentence_key]
+
+        # Fixing https://github.com/tensorflow/nmt/issues/405
+        if not isinstance(sentence, str):
+            sentence = sentence.decode("utf-8")
+
         self.assertEqual(expected_sentence, sentence)
 
   def _createTestTrainModel(self, m_creator, hparams, sess):
