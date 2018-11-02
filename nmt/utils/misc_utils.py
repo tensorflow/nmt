@@ -25,7 +25,6 @@ import sys
 import time
 from distutils import version
 
-import numpy as np
 import tensorflow as tf
 
 

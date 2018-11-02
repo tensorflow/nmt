@@ -23,7 +23,6 @@ import tensorflow as tf
 from . import attention_model
 from . import model_helper
 from .utils import misc_utils as utils
-from .utils import vocab_utils
 
 __all__ = ["GNMTModel"]
 

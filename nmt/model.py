@@ -20,14 +20,12 @@ from __future__ import print_function
 
 import abc
 import collections
-import numpy as np
 
 import tensorflow as tf
 
 from . import model_helper
 from .utils import iterator_utils
 from .utils import misc_utils as utils
-from .utils import vocab_utils
 
 utils.check_tensorflow_version()
 
