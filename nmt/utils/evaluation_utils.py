@@ -24,7 +24,6 @@ import tensorflow as tf
 from ..scripts import bleu
 from ..scripts import rouge
 
-
 __all__ = ["evaluate"]
 
 
@@ -42,6 +41,8 @@ def evaluate(ref_file, trans_file, metric, subword_option=None):
     evaluation_score = _accuracy(ref_file, trans_file)
   elif metric.lower() == "word_accuracy":
     evaluation_score = _word_accuracy(ref_file, trans_file)
+  elif metric.lower() == "f_score":
+    evaluation_score = fscore(ref_file, trans_file)
   else:
     raise ValueError("Unknown metric %s" % metric)
 
@@ -182,3 +183,16 @@ def _moses_bleu(multi_bleu_script, tgt_test, trans_file, subword_option=None):
   bleu_score = float(m.group(1))
 
   return bleu_score
+
+
+def fscore(label_file, pred_file):
+  script = ["python2.7",
+            "/Users/mac/PycharmProjects/nmt/nmt/scripts/m2script/m2scorer.py",
+            pred_file, label_file]
+
+  process = subprocess.Popen(" ".join(script),
+                             shell=True,
+                             env={"PYTHONPATH": "."}
+                             )
+  process.communicate()
+  return 0.5

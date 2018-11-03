@@ -233,7 +233,7 @@ def add_arguments(parser):
                       const=True, default=False, help="Debug GPU allocation.")
   parser.add_argument("--metrics", type=str, default="bleu",
                       help=("Comma-separated list of evaluations "
-                            "metrics (bleu,rouge,accuracy)"))
+                            "metrics (bleu,rouge,accuracy,f_score)"))
   parser.add_argument("--steps_per_external_eval", type=int, default=None,
                       help="""\
       How many training steps to do per external evaluation.  Automatically set
