@@ -19,21 +19,22 @@ from __future__ import print_function
 import collections
 import os
 import time
+
 import numpy as np
 import six
 import tensorflow as tf
-
 from tensorflow.python.ops import lookup_ops
+
 from .utils import iterator_utils
 from .utils import misc_utils as utils
 from .utils import vocab_utils
 
 __all__ = [
-    "get_initializer", "get_device_str", "create_train_model",
-    "create_eval_model", "create_infer_model",
-    "create_emb_for_encoder_and_decoder", "create_rnn_cell", "gradient_clip",
-    "create_or_load_model", "load_model", "avg_checkpoints",
-    "compute_perplexity"
+  "get_initializer", "get_device_str", "create_train_model",
+  "create_eval_model", "create_infer_model",
+  "create_emb_for_encoder_and_decoder", "create_rnn_cell", "gradient_clip",
+  "create_or_load_model", "load_model", "avg_checkpoints",
+  "compute_perplexity"
 ]
 
 # If a vocab size is greater than this value, put the embedding on cpu instead
@@ -115,7 +116,8 @@ def create_train_model(
     # Note: One can set model_device_fn to
     # `tf.train.replica_device_setter(ps_tasks)` for distributed training.
     model_device_fn = None
-    if extra_args: model_device_fn = extra_args.model_device_fn
+    if extra_args:
+      model_device_fn = extra_args.model_device_fn
     with tf.device(model_device_fn):
       model = model_creator(
           hparams,
@@ -276,7 +278,7 @@ def _create_pretrained_emb_from_txt(
 
 
 def _create_or_load_embed(embed_name, vocab_file, embed_file,
-                          vocab_size, embed_size, dtype):
+    vocab_size, embed_size, dtype):
   """Create a new or load an existing embedding matrix."""
   if vocab_file and embed_file:
     embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
@@ -288,19 +290,19 @@ def _create_or_load_embed(embed_name, vocab_file, embed_file,
 
 
 def create_emb_for_encoder_and_decoder(share_vocab,
-                                       src_vocab_size,
-                                       tgt_vocab_size,
-                                       src_embed_size,
-                                       tgt_embed_size,
-                                       dtype=tf.float32,
-                                       num_enc_partitions=0,
-                                       num_dec_partitions=0,
-                                       src_vocab_file=None,
-                                       tgt_vocab_file=None,
-                                       src_embed_file=None,
-                                       tgt_embed_file=None,
-                                       use_char_encode=False,
-                                       scope=None):
+    src_vocab_size,
+    tgt_vocab_size,
+    src_embed_size,
+    tgt_embed_size,
+    dtype=tf.float32,
+    num_enc_partitions=0,
+    num_dec_partitions=0,
+    src_vocab_file=None,
+    tgt_vocab_file=None,
+    src_embed_file=None,
+    tgt_embed_file=None,
+    use_char_encode=False,
+    scope=None):
   """Create embedding matrix for both encoder and decoder.
 
   Args:
@@ -389,7 +391,7 @@ def create_emb_for_encoder_and_decoder(share_vocab,
 
 
 def _single_cell(unit_type, num_units, forget_bias, dropout, mode,
-                 residual_connection=False, device_str=None, residual_fn=None):
+    residual_connection=False, device_str=None, residual_fn=None):
   """Create an instance of a single RNN cell."""
   # dropout (= 1 - keep_prob) is set to 0 during eval and infer
   dropout = dropout if mode == tf.contrib.learn.ModeKeys.TRAIN else 0.0
@@ -397,12 +399,10 @@ def _single_cell(unit_type, num_units, forget_bias, dropout, mode,
   # Cell Type
   if unit_type == "lstm":
     utils.print_out("  LSTM, forget_bias=%g" % forget_bias, new_line=False)
-    single_cell = tf.contrib.rnn.BasicLSTMCell(
-        num_units,
-        forget_bias=forget_bias)
+    single_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=forget_bias)
   elif unit_type == "gru":
     utils.print_out("  GRU", new_line=False)
-    single_cell = tf.contrib.rnn.GRUCell(num_units)
+    single_cell = tf.nn.rnn_cell.GRUCell(num_units)
   elif unit_type == "layer_norm_lstm":
     utils.print_out("  Layer Normalized LSTM, forget_bias=%g" % forget_bias,
                     new_line=False)
@@ -418,20 +418,20 @@ def _single_cell(unit_type, num_units, forget_bias, dropout, mode,
 
   # Dropout (= 1 - keep_prob)
   if dropout > 0.0:
-    single_cell = tf.contrib.rnn.DropoutWrapper(
+    single_cell = tf.nn.rnn_cell.DropoutWrapper(
         cell=single_cell, input_keep_prob=(1.0 - dropout))
-    utils.print_out("  %s, dropout=%g " %(type(single_cell).__name__, dropout),
+    utils.print_out("  %s, dropout=%g " % (type(single_cell).__name__, dropout),
                     new_line=False)
 
   # Residual
   if residual_connection:
-    single_cell = tf.contrib.rnn.ResidualWrapper(
+    single_cell = tf.nn.rnn_cell.ResidualWrapper(
         single_cell, residual_fn=residual_fn)
     utils.print_out("  %s" % type(single_cell).__name__, new_line=False)
 
   # Device Wrapper
   if device_str:
-    single_cell = tf.contrib.rnn.DeviceWrapper(single_cell, device_str)
+    single_cell = tf.nn.rnn_cell.DeviceWrapper(single_cell, device_str)
     utils.print_out("  %s, device=%s" %
                     (type(single_cell).__name__, device_str), new_line=False)
 
@@ -439,8 +439,8 @@ def _single_cell(unit_type, num_units, forget_bias, dropout, mode,
 
 
 def _cell_list(unit_type, num_units, num_layers, num_residual_layers,
-               forget_bias, dropout, mode, num_gpus, base_gpu=0,
-               single_cell_fn=None, residual_fn=None):
+    forget_bias, dropout, mode, num_gpus, base_gpu=0,
+    single_cell_fn=None, residual_fn=None):
   """Create a list of RNN cells."""
   if not single_cell_fn:
     single_cell_fn = _single_cell
@@ -466,8 +466,8 @@ def _cell_list(unit_type, num_units, num_layers, num_residual_layers,
 
 
 def create_rnn_cell(unit_type, num_units, num_layers, num_residual_layers,
-                    forget_bias, dropout, mode, num_gpus, base_gpu=0,
-                    single_cell_fn=None):
+    forget_bias, dropout, mode, num_gpus, base_gpu=0,
+    single_cell_fn=None):
   """Create multi-layer RNN cell.
 
   Args:
@@ -546,7 +546,7 @@ def load_model(model, ckpt_path, session, name):
 
 
 def avg_checkpoints(model_dir, num_last_checkpoints, global_step,
-                    global_step_name):
+    global_step_name):
   """Average the last N checkpoints in the model_dir."""
   checkpoint_state = tf.train.get_checkpoint_state(model_dir)
   if not checkpoint_state:
@@ -555,7 +555,7 @@ def avg_checkpoints(model_dir, num_last_checkpoints, global_step,
 
   # Checkpoints are ordered from oldest to newest.
   checkpoints = (
-      checkpoint_state.all_model_checkpoint_paths[-num_last_checkpoints:])
+    checkpoint_state.all_model_checkpoint_paths[-num_last_checkpoints:])
 
   if len(checkpoints) < num_last_checkpoints:
     utils.print_out(
@@ -593,8 +593,8 @@ def avg_checkpoints(model_dir, num_last_checkpoints, global_step,
   # variables into the avg_model_dir.
   with tf.Graph().as_default():
     tf_vars = [
-        tf.get_variable(v, shape=var_values[v].shape, dtype=var_dtypes[name])
-        for v in var_values
+      tf.get_variable(v, shape=var_values[v].shape, dtype=var_dtypes[name])
+      for v in var_values
     ]
 
     placeholders = [tf.placeholder(v.dtype, shape=v.shape) for v in tf_vars]

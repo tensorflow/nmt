@@ -223,7 +223,7 @@ def add_arguments(parser):
                       help="""\
                       Whether to split each word or bpe into character, and then
                       generate the word-level representation from the character
-                      reprentation.
+                      representation.
                       """)
 
   # Misc
@@ -653,7 +653,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
         out_dir, default_hparams, flags.hparams_path,
         save_hparams=(jobid == 0))
 
-  ## Train / Decode
+  # Train / Decode
   if flags.inference_input_file:
     # Inference output directory
     trans_file = flags.inference_output_file
@@ -689,7 +689,7 @@ def run_main(flags, default_hparams, train_fn, inference_fn, target_session=""):
     train_fn(hparams, target_session=target_session)
 
 
-def main(unused_argv):
+def main(_):
   default_hparams = create_hparams(FLAGS)
   train_fn = train.train
   inference_fn = inference.inference

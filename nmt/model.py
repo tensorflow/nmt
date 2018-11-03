@@ -181,7 +181,7 @@ class BaseModel(object):
           tf.to_int64(self.sample_id))
 
     if self.mode != tf.contrib.learn.ModeKeys.INFER:
-      ## Count the number of predicted words for compute ppl.
+      # Count the number of predicted words for compute ppl.
       self.predict_count = tf.reduce_sum(
           self.iterator.target_sequence_length)
 
