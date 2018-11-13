@@ -362,7 +362,7 @@ class BaseModel(object):
         sample_id: sampling indices.
 
     Raises:
-      ValueError: if encoder_type differs from mono and bi, or
+      ValueError: if encoder_type differs from uni and bi, or
         attention_option is not (luong | scaled_luong |
         bahdanau | normed_bahdanau).
     """
