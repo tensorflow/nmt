@@ -482,6 +482,7 @@ def train(hparams, scope=None, target_session=""):
 
   # TensorFlow model
   config_proto = utils.get_config_proto(
+      allow_soft_placement=True,
       log_device_placement=log_device_placement,
       num_intra_threads=hparams.num_intra_threads,
       num_inter_threads=hparams.num_inter_threads)
@@ -501,11 +502,11 @@ def train(hparams, scope=None, target_session=""):
       os.path.join(out_dir, summary_name), train_model.graph)
 
   # First evaluation
-  run_full_eval(
-      model_dir, infer_model, infer_sess,
-      eval_model, eval_sess, hparams,
-      summary_writer, sample_src_data,
-      sample_tgt_data, avg_ckpts)
+  # run_full_eval(
+  #     model_dir, infer_model, infer_sess,
+  #     eval_model, eval_sess, hparams,
+  #     summary_writer, sample_src_data,
+  #     sample_tgt_data, avg_ckpts)
 
   last_stats_step = global_step
   last_eval_step = global_step

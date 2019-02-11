@@ -98,7 +98,7 @@ def get_model_creator(hparams):
 def start_sess_and_load_model(infer_model, ckpt_path):
   """Start session and load model."""
   sess = tf.Session(
-      graph=infer_model.graph, config=utils.get_config_proto())
+      graph=infer_model.graph, config=utils.get_config_proto(allow_soft_placement=True,))
   with infer_model.graph.as_default():
     loaded_infer_model = model_helper.load_model(
         infer_model.model, ckpt_path, sess, "infer")

@@ -233,17 +233,205 @@ def create_infer_model(model_creator, hparams, scope=None, extra_args=None):
       batch_size_placeholder=batch_size_placeholder,
       iterator=iterator)
 
+class ScoreModel(
+    collections.namedtuple("ScoreModel",
+                           ("graph", "model", "src_placeholder", "tgt_placeholder",
+                            "batch_size_placeholder", "iterator"))):
+  pass
 
-def _get_embed_device(vocab_size):
+def create_score_model(model_creator, hparams, scope=None, extra_args=None):
+  graph = tf.Graph()
+  src_vocab_file = hparams.src_vocab_file
+  tgt_vocab_file = hparams.tgt_vocab_file
+
+  with graph.as_default(), tf.container(scope or "serve"):
+    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
+        tgt_vocab_file, default_value=vocab_utils.UNK)
+
+    src_placeholder = tf.placeholder(shape=[None], dtype=tf.string, name="src_placeholder")
+    tgt_placeholder = tf.placeholder(shape=[None], dtype=tf.string, name="tgt_placeholder")
+    batch_size_placeholder = tf.constant(1, tf.int64)
+    ## experimental
+    src_dataset = tf.data.Dataset.from_tensor_slices(src_placeholder)
+    tgt_dataset = tf.data.Dataset.from_tensor_slices(tgt_placeholder)
+    ## experimental end
+
+    iterator = pre_process_discriminative_model(
+        src_dataset,
+        tgt_dataset,
+        src_vocab_table,
+        tgt_vocab_table,
+        eos=hparams.eos,
+        sos=hparams.sos,
+        src_max_len=hparams.src_max_len_infer,
+        tgt_max_len=hparams.tgt_max_len_infer)
+    model = model_creator(
+        hparams,
+        iterator=iterator,
+        mode=tf.contrib.learn.ModeKeys.EVAL,
+        source_vocab_table=src_vocab_table,
+        target_vocab_table=tgt_vocab_table,
+        reverse_target_vocab_table=reverse_tgt_vocab_table,
+        scope=scope,
+        extra_args=extra_args)
+  return ScoreModel(
+      graph=graph,
+      model=model,
+      src_placeholder=src_placeholder,
+      tgt_placeholder=tgt_placeholder,
+      batch_size_placeholder=batch_size_placeholder,
+      iterator=iterator)
+
+
+# TODO: this should probably go to iterator_utils
+def pre_process_discriminative_model(src_dataset, tgt_dataset, src_vocab_table, tgt_vocab_table, eos, sos, batch_size = 20,
+                                     src_max_len=50, tgt_max_len=50, num_parallel_calls=4):
+  """
+  this is how we define pre-processing pipeline using tf dataset API
+  tf pipeline is a ``real'' pipeline which supports pipelining and parallel processing
+  """
+  src_eos_id = tf.cast(src_vocab_table.lookup(tf.constant(eos)), tf.int32)
+
+  tgt_eos_id = tf.cast(tgt_vocab_table.lookup(tf.constant(eos)), tf.int32)
+  tgt_sos_id = tf.cast(tgt_vocab_table.lookup(tf.constant(sos)), tf.int32)
+
+  src_tgt_dataset = tf.data.Dataset.zip((src_dataset, tgt_dataset))
+  src_tgt_dataset = src_tgt_dataset.map(lambda src, tgt:
+      (tf.string_split([src]).values, tf.string_split([tgt]).values),
+      num_parallel_calls=num_parallel_calls)
+
+  if src_max_len:
+    src_tgt_dataset = src_tgt_dataset.map(
+        lambda src, tgt: (src[:src_max_len], tgt),
+        num_parallel_calls=num_parallel_calls)
+  if tgt_max_len:
+    src_tgt_dataset = src_tgt_dataset.map(
+        lambda src, tgt: (src, tgt[:tgt_max_len]),
+        num_parallel_calls=num_parallel_calls)
+
+  src_tgt_dataset = src_tgt_dataset.map(
+      lambda src, tgt: (tf.cast(src_vocab_table.lookup(src), tf.int32),
+                        tf.cast(tgt_vocab_table.lookup(tgt), tf.int32)),
+      num_parallel_calls=num_parallel_calls)
+
+  src_tgt_dataset = src_tgt_dataset.map(
+      lambda src, tgt: (src,
+                        tf.concat(([tgt_sos_id], tgt), 0),
+                        tf.concat((tgt, [tgt_eos_id]), 0)),
+      num_parallel_calls=num_parallel_calls)
+
+  src_tgt_dataset = src_tgt_dataset.map(
+      lambda src, tgt_in, tgt_out: (
+          src, tgt_in, tgt_out, tf.size(src), tf.size(tgt_in)),
+      num_parallel_calls=num_parallel_calls)
+
+  def batching_func(x):
+    return x.padded_batch(
+        batch_size,
+        # The first three entries are the source and target line rows;
+        # these have unknown-length vectors.  The last two entries are
+        # the source and target row sizes; these are scalars.
+        padded_shapes=(
+            tf.TensorShape([None]),  # src
+            tf.TensorShape([None]),  # tgt_input
+            tf.TensorShape([None]),  # tgt_output
+            tf.TensorShape([]),  # src_len
+            tf.TensorShape([])),  # tgt_len
+        # Pad the source and target sequences with eos tokens.
+        # (Though notice we don't generally need to do this since
+        # later on we will be masking out calculations past the true sequence.
+        padding_values=(
+            src_eos_id,  # src
+            tgt_eos_id,  # tgt_input
+            tgt_eos_id,  # tgt_output
+            0,  # src_len -- unused
+            0))  # tgt_len -- unused
+
+  batched_dataset = batching_func(src_tgt_dataset)
+  src_ids, tgt_input_ids, tgt_output_ids, src_seq_len, tgt_seq_len = tf.contrib.data.get_single_element(batched_dataset)
+  # this does not work even when trying adding batched_iter.initializer
+  # to legacy_init_op or main_op for add_meta_graph_and_variables
+  # the tf developers should fix this.
+  # batched_iter = batched_dataset.make_initializable_iterator()
+  # (src_ids, tgt_input_ids, tgt_output_ids, src_seq_len,
+  #  tgt_seq_len) = (batched_iter.get_next())
+  return iterator_utils.BatchedInput(
+      initializer=None,
+      source=src_ids,
+      target_input=tgt_input_ids,
+      target_output=tgt_output_ids,
+      source_sequence_length=src_seq_len,
+      target_sequence_length=tgt_seq_len)
+
+
+def create_serve_model(model_creator, hparams, scope=None, extra_args=None):
+  graph = tf.Graph()
+  src_vocab_file = hparams.src_vocab_file
+  tgt_vocab_file = hparams.tgt_vocab_file
+
+  with graph.as_default(), tf.container(scope or "serve"):
+    src_vocab_table, tgt_vocab_table = vocab_utils.create_vocab_tables(
+        src_vocab_file, tgt_vocab_file, hparams.share_vocab)
+    reverse_tgt_vocab_table = lookup_ops.index_to_string_table_from_file(
+        tgt_vocab_file, default_value=vocab_utils.UNK)
+
+    # src_placeholder = tf.placeholder(shape=[None], dtype=tf.string)
+    src_placeholder = tf.placeholder(dtype=tf.string, name="src_placeholder")
+    batch_size_placeholder = tf.constant(1, tf.int64)
+
+    iterator = pre_process_generative_model(
+        src_placeholder,
+        src_vocab_table,
+        eos=hparams.eos,
+        src_max_len=hparams.src_max_len_infer)
+    model = model_creator(
+        hparams,
+        iterator=iterator,
+        mode=tf.contrib.learn.ModeKeys.INFER,
+        source_vocab_table=src_vocab_table,
+        target_vocab_table=tgt_vocab_table,
+        reverse_target_vocab_table=reverse_tgt_vocab_table,
+        scope=scope,
+        extra_args=extra_args)
+  return InferModel(
+      graph=graph,
+      model=model,
+      src_placeholder=src_placeholder,
+      batch_size_placeholder=batch_size_placeholder,
+      iterator=iterator)
+
+# TODO: this should probably go to iterator_utils
+def pre_process_generative_model(src_string, src_vocab_table, eos, src_max_len=50):
+  src_eos_id = tf.cast(src_vocab_table.lookup(tf.constant(eos)), tf.int32)
+  src_string = tf.string_split(src_string).values
+
+  if src_max_len:
+    src_string = src_string[:, src_max_len]
+  src = tf.cast(src_vocab_table.lookup(src_string), tf.int32)
+  src = tf.expand_dims(src, axis=0)
+  src_len = tf.size(src)
+  src_len = tf.expand_dims(src_len, axis=0)
+
+  return iterator_utils.BatchedInput(
+    initializer=None,
+    source=src,
+    target_input=None,
+    target_output=None,
+    source_sequence_length=src_len,
+    target_sequence_length=None)
+
+def _get_embed_device(vocab_size, num_gpus):
   """Decide on which device to place an embed matrix given its vocab size."""
-  if vocab_size > VOCAB_SIZE_THRESHOLD_CPU:
+  if vocab_size > VOCAB_SIZE_THRESHOLD_CPU or num_gpus == 0:
     return "/cpu:0"
   else:
     return "/gpu:0"
 
 
 def _create_pretrained_emb_from_txt(
-    vocab_file, embed_file, num_trainable_tokens=3, dtype=tf.float32,
+    vocab_file, embed_file, num_gpus, num_trainable_tokens=3, dtype=tf.float32,
     scope=None):
   """Load pretrain embeding from embed_file, and return an embedding matrix.
 
@@ -269,19 +457,19 @@ def _create_pretrained_emb_from_txt(
   emb_mat = tf.constant(emb_mat)
   emb_mat_const = tf.slice(emb_mat, [num_trainable_tokens, 0], [-1, -1])
   with tf.variable_scope(scope or "pretrain_embeddings", dtype=dtype) as scope:
-    with tf.device(_get_embed_device(num_trainable_tokens)):
+    with tf.device(_get_embed_device(num_trainable_tokens, num_gpus)):
       emb_mat_var = tf.get_variable(
           "emb_mat_var", [num_trainable_tokens, emb_size])
   return tf.concat([emb_mat_var, emb_mat_const], 0)
 
 
 def _create_or_load_embed(embed_name, vocab_file, embed_file,
-                          vocab_size, embed_size, dtype):
+                          vocab_size, embed_size, dtype, num_gpus=0):
   """Create a new or load an existing embedding matrix."""
   if vocab_file and embed_file:
-    embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file)
+    embedding = _create_pretrained_emb_from_txt(vocab_file, embed_file, num_gpus)
   else:
-    with tf.device(_get_embed_device(vocab_size)):
+    with tf.device(_get_embed_device(vocab_size, num_gpus)):
       embedding = tf.get_variable(
           embed_name, [vocab_size, embed_size], dtype)
   return embedding
@@ -300,7 +488,8 @@ def create_emb_for_encoder_and_decoder(share_vocab,
                                        src_embed_file=None,
                                        tgt_embed_file=None,
                                        use_char_encode=False,
-                                       scope=None):
+                                       scope=None,
+                                       num_gpus=0):
   """Create embedding matrix for both encoder and decoder.
 
   Args:
@@ -369,21 +558,21 @@ def create_emb_for_encoder_and_decoder(share_vocab,
 
       embedding_encoder = _create_or_load_embed(
           "embedding_share", vocab_file, embed_file,
-          src_vocab_size, src_embed_size, dtype)
+          src_vocab_size, src_embed_size, dtype, num_gpus=num_gpus)
       embedding_decoder = embedding_encoder
     else:
       if not use_char_encode:
         with tf.variable_scope("encoder", partitioner=enc_partitioner):
           embedding_encoder = _create_or_load_embed(
               "embedding_encoder", src_vocab_file, src_embed_file,
-              src_vocab_size, src_embed_size, dtype)
+              src_vocab_size, src_embed_size, dtype, num_gpus=num_gpus)
       else:
         embedding_encoder = None
 
       with tf.variable_scope("decoder", partitioner=dec_partitioner):
         embedding_decoder = _create_or_load_embed(
             "embedding_decoder", tgt_vocab_file, tgt_embed_file,
-            tgt_vocab_size, tgt_embed_size, dtype)
+            tgt_vocab_size, tgt_embed_size, dtype, num_gpus=num_gpus)
 
   return embedding_encoder, embedding_decoder
 

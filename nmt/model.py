@@ -314,7 +314,8 @@ class BaseModel(object):
             src_embed_file=hparams.src_embed_file,
             tgt_embed_file=hparams.tgt_embed_file,
             use_char_encode=hparams.use_char_encode,
-            scope=scope,))
+            scope=scope,
+            num_gpus=self.num_gpus))
 
   def _get_train_summary(self):
     """Get train summary."""
@@ -399,6 +400,42 @@ class BaseModel(object):
           loss = self._compute_loss(logits, decoder_cell_outputs)
       else:
         loss = tf.constant(0.0)
+
+      # serving model related stuff
+      # check if we are serving the likelihood scoring model
+      if self.iterator.target_output is not None:
+        target_output = self.iterator.target_output
+        if self.time_major:
+          target_output = tf.transpose(target_output)
+
+        # ? why do i get dim mismatch here
+        target_output_shape = tf.shape(target_output)
+        logits_shape = tf.shape(logits)
+        print_target_output_shape_op = tf.Print(target_output_shape,
+            [target_output_shape], "ZY: target_output_shape=")
+        print_logits_shape_op = tf.Print(logits_shape,
+            [logits_shape], "ZY: logits_shape=")
+        # note we will score one tgt seq with multiple src seq
+        target_masks = tf.fill(target_output_shape, 1.0)
+        seq_loss = tf.contrib.seq2seq.sequence_loss(
+            logits,
+            target_output,
+            target_masks,
+            average_across_timesteps=False,
+            average_across_batch=False,
+        )
+        print_loss_op = tf.Print(loss, [loss], "ZY: loss=")
+        seq_loss_sum = tf.reduce_sum(seq_loss)
+        print_seq_loss_op = tf.Print(seq_loss, [seq_loss], "ZY: seq_loss=")
+        print_seq_loss_sum_op = tf.Print(seq_loss_sum, [seq_loss_sum], "ZY: seq_loss_sum=")
+        with tf.control_dependencies([print_logits_shape_op,
+                                      print_target_output_shape_op,
+                                      print_loss_op,
+                                      print_seq_loss_op,
+                                      print_seq_loss_sum_op]
+                                      ):
+          self.log_likelihoods = seq_loss
+          self.print_log_likelihoods_op = tf.Print(self.log_likelihoods, [self.log_likelihoods], "ZY: logits=")
 
       return logits, loss, final_context_state, sample_id
 
