@@ -255,7 +255,7 @@ class BaseModel(object):
         self.global_step < hparams.warmup_steps,
         lambda: inv_decay * self.learning_rate,
         lambda: self.learning_rate,
-        name="learning_rate_warump_cond")
+        name="learning_rate_warmup_cond")
 
   def _get_decay_info(self, hparams):
     """Return decay info based on decay_scheme."""
