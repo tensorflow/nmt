@@ -437,7 +437,7 @@ def get_model_creator(hparams):
   if (hparams.encoder_type == "gnmt" or
       hparams.attention_architecture in ["gnmt", "gnmt_v2"]):
     model_creator = gnmt_model.GNMTModel
-  elif hparams.attention_architecture == "standard":
+  elif hparams.attention and hparams.attention_architecture == "standard":
     model_creator = attention_model.AttentionModel
   elif not hparams.attention:
     model_creator = nmt_model.Model
