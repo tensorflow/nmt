@@ -202,6 +202,8 @@ class ModelTest(tf.test.TestCase):
         'BeamSearchGNMTModel: batch 0 of beam 0': '',
         'BeamSearchGNMTModel: batch 1 of beam 0': '',
     }
+    cls.expected_beam_sentences = dict(
+        (k, v.encode()) for k, v in cls.expected_beam_sentences.items())
 
   @classmethod
   def tearDownClass(cls):

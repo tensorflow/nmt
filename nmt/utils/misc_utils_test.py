@@ -40,7 +40,7 @@ class MiscUtilsTest(tf.test.TestCase):
 
   def testFormatSPMText(self):
     spm_line = u"\u2581This \u2581is \u2581a \u2581 te st .".encode("utf-8")
-    expected_result = "This is a test."
+    expected_result = b"This is a test."
     self.assertEqual(expected_result,
                      misc_utils.format_spm_text(spm_line.split(b" ")))
 

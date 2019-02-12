@@ -133,8 +133,8 @@ def _accuracy(label_file, pred_file):
 def _word_accuracy(label_file, pred_file):
   """Compute accuracy on per word basis."""
 
-  with codecs.getreader("utf-8")(tf.gfile.GFile(label_file, "r")) as label_fh:
-    with codecs.getreader("utf-8")(tf.gfile.GFile(pred_file, "r")) as pred_fh:
+  with codecs.getreader("utf-8")(tf.gfile.GFile(label_file, "rb")) as label_fh:
+    with codecs.getreader("utf-8")(tf.gfile.GFile(pred_file, "rb")) as pred_fh:
       total_acc, total_count = 0., 0.
       for sentence in label_fh:
         labels = sentence.strip().split(" ")
