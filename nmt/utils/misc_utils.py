@@ -31,7 +31,7 @@ import tensorflow as tf
 
 def check_tensorflow_version():
   # LINT.IfChange
-  min_tf_version = "1.3.0"
+  min_tf_version = "1.12.0"
   # LINT.ThenChange(<pwd>/nmt/copy.bara.sky)
   if (version.LooseVersion(tf.__version__) <
       version.LooseVersion(min_tf_version)):
