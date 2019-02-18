@@ -526,6 +526,13 @@ def train(hparams, scope=None, target_session=""):
       utils.print_out(
           "# Finished an epoch, step %d. Perform external evaluation" %
           global_step)
+      
+      # Save checkpoint
+      loaded_train_model.saver.save(
+          train_sess,
+          os.path.join(out_dir, "translate.ckpt"),
+          global_step=global_step)
+
       run_sample_decode(infer_model, infer_sess, model_dir, hparams,
                         summary_writer, sample_src_data, sample_tgt_data)
       run_external_eval(infer_model, infer_sess, model_dir, hparams,
