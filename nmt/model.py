@@ -808,7 +808,7 @@ class Model(BaseModel):
                                num_bi_layers,
                                num_bi_residual_layers,
                                base_gpu=0):
-    """Create and call biddirectional RNN cells.
+    """Create and call bidirectional RNN cells.
 
     Args:
       num_residual_layers: Number of residual layers from top to bottom. For
