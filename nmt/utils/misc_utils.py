@@ -165,8 +165,6 @@ def format_bpe_text(symbols, delimiter=b"@@"):
   """Convert a sequence of bpe words into sentence."""
   words = []
   word = b""
-  if isinstance(symbols, str):
-    symbols = symbols.encode()
   delimiter_len = len(delimiter)
   for symbol in symbols:
     if len(symbol) >= delimiter_len and symbol[-delimiter_len:] == delimiter:
@@ -182,3 +180,17 @@ def format_spm_text(symbols):
   """Decode a text in SPM (https://github.com/google/sentencepiece) format."""
   return u"".join(format_text(symbols).decode("utf-8").split()).replace(
       u"\u2581", u" ").strip().encode("utf-8")
+
+def format_sentence(sentence, subword_option):
+  """Decode sentence using subword option"""
+  if isinstance(sentence, str):
+    sentence = sentence.encode("utf-8").split(b' ')
+
+  if subword_option == "bpe":  # BPE
+    sentence = format_bpe_text(sentence)
+  elif subword_option == "spm":  # SPM
+    sentence = format_spm_text(sentence)
+  else:
+    sentence = format_text(sentence)
+
+  return sentence

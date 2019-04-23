@@ -691,8 +691,8 @@ def _sample_decode(model, global_step, sess, hparams, iterator, src_data,
       sent_id=0,
       tgt_eos=hparams.eos,
       subword_option=hparams.subword_option)
-  utils.print_out("    src: %s" % src_data[decode_id])
-  utils.print_out("    ref: %s" % tgt_data[decode_id])
+  utils.print_out(b"    src: " + utils.format_sentence(src_data[decode_id], hparams.subword_option))
+  utils.print_out(b"    ref: " + utils.format_sentence(tgt_data[decode_id], hparams.subword_option))
   utils.print_out(b"    nmt: " + translation)
 
   # Summary
