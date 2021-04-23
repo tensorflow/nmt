@@ -83,6 +83,10 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4,
         possible_matches_by_order[order-1] += possible_matches
 
   precisions = [0] * max_order
+  
+  if reference_length == 0:
+    return 0, precisions, 0, 0, translation_length, reference_length
+  
   for i in range(0, max_order):
     if smooth:
       precisions[i] = ((matches_by_order[i] + 1.) /
