@@ -84,7 +84,7 @@ def compute_bleu(reference_corpus, translation_corpus, max_order=4,
 
   precisions = [0] * max_order
   for i in range(0, max_order):
-    if smooth:
+    if smooth and i > 0:
       precisions[i] = ((matches_by_order[i] + 1.) /
                        (possible_matches_by_order[i] + 1.))
     else:
