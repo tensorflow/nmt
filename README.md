@@ -565,7 +565,7 @@ target hidden state at the top layer of a vanilla seq2seq model. The function
 
 Various implementations of attention mechanisms can be found
 in
-[attention_wrapper.py](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/seq2seq/python/ops/attention_wrapper.py).
+[attention_wrapper.py](https://github.com/tensorflow/addons/blob/master/tensorflow_addons/seq2seq/attention_wrapper.py).
 
 ***What matters in the attention mechanism?***
 
